@@ -1,0 +1,31 @@
+# === CẤU HÌNH CHO HỆ THỐNG AUTOSCALING ===
+# Lưu ý: Chỉ chỉnh sửa các giá trị sau dấu hai chấm. 
+# Không xóa các từ khóa ở đầu dòng.
+
+# 1. CẤU HÌNH ĐƯỜNG DẪN DỮ LIỆU
+paths:
+  input_dir: "data"
+  output_dir: "data"
+  train_file: "train.txt"
+  test_file: "test.txt"
+
+# 2. CẤU HÌNH XỬ LÝ DỮ LIỆU (AGGREGATION)
+processing:
+  # Các khung thời gian cần xuất ra file CSV
+  intervals: ["1min", "5min", "15min"]
+  # Mốc thời gian xảy ra sự cố (Downtime) để gắn cờ 0/1
+  downtime:
+    start: "1995-08-01 14:52:01"
+    end: "1995-08-03 04:36:13"
+
+# 3. THAM SỐ MÔ HÌNH (ví dụ)
+model_params:
+  prophet:
+    changepoint_prior_scale: 0.05
+    yearly_seasonality: false
+    weekly_seasonality: true
+    daily_seasonality: true
+  xgboost:
+    n_estimators: 100
+    max_depth: 5
+    learning_rate: 0.1
