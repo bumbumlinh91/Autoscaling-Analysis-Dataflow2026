@@ -1,6 +1,7 @@
 """
 MODULE: DATA PREPROCESSING PIPELINE """
 import re
+import yaml
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -17,9 +18,16 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Các hằng số quan trọng
-# Khoảng thời gian bão (Downtime) đã được xác định từ EDA
-DOWNTIME_START = pd.Timestamp("1995-08-01 14:52:01")
-DOWNTIME_END = pd.Timestamp("1995-08-03 04:36:13")
+def load_config():
+    # Trỏ đến thư mục config và đọc file config.yaml
+    base_dir = Path(__file__).resolve().parent.parent
+    config_path = base_dir / "config" / "config.yaml"
+    with open(config_path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+# Lấy thông tin downtime từ config
+CONFIG = load_config()
+DOWNTIME_START = pd.Timestamp(CONFIG['processing']['downtime']['start'])
+DOWNTIME_END = pd.Timestamp(CONFIG['processing']['downtime']['end'])
 
 
 # ============================================================
@@ -169,8 +177,8 @@ def run_full_pipeline(file_type='train'):
     # 1. Thiết lập đường dẫn tương đối 
     BASE_DIR = Path(__file__).resolve().parent.parent 
     DATA_DIR = BASE_DIR / "data"
-    filename = "train.txt" if file_type == 'train' else "test.txt"
-    file_path = DATA_DIR / filename
+    filename = CONFIG['paths']['train_file'] if file_type == 'train' else CONFIG['paths']['test_file']
+    file_path = (BASE_DIR / CONFIG['paths']['input_dir']) / filename
     
     # 2. Khởi tạo
     parser = LogParser()
@@ -181,7 +189,7 @@ def run_full_pipeline(file_type='train'):
     clean_df = processor.clean_dataframe(raw_df)
     
     # 4. Aggregate cho cả 3 khung thời gian
-    intervals = ['1min', '5min', '15min']
+    intervals = CONFIG['processing']['intervals']
     processed_package = {}
     
     for interval in intervals:
