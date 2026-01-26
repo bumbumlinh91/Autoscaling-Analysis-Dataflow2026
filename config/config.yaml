@@ -29,3 +29,10 @@ model_params:
     n_estimators: 100
     max_depth: 5
     learning_rate: 0.1
+# 4. CẤU HÌNH LỌC NHIỄU VÀ PHÂN TÍCH
+analysis:
+  # Ngưỡng tỉ lệ lỗi để xác định một khung giờ bị nhiễm bởi Bot/DDoS
+  # (Mặc định 0.8 = 80%)
+  bot_error_threshold: 0.8
+  # Hệ số quan trọng của Bytes so với Hits (Dùng cho Resource Intensity)
+  resource_weight: 1.2
