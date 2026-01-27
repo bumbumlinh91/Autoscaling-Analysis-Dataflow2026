@@ -31,6 +31,61 @@ DOWNTIME_END = pd.Timestamp(CONFIG['processing']['downtime']['end'])
 
 
 # ============================================================
+# MODULE PHỤ TRỢ: REPORTING (HOST & CONTENT)
+# ============================================================
+def export_top_hosts(df, output_dir):
+    """Xuất báo cáo Top Host phục vụ quá trình EDA."""
+    print("🕵️‍♂️ [REPORT] Đang trích xuất Top 20 Hosts...")
+    try:
+        if 'host' not in df.columns: return
+
+        # Đếm tần suất
+        top_hosts = df['host'].value_counts().head(20).reset_index()
+        top_hosts.columns = ['host', 'request_count']
+
+        # Tính % đóng góp
+        total = len(df)
+        top_hosts['percentage'] = (top_hosts['request_count'] / total) * 100
+
+        # Lưu file
+        save_path = output_dir / "top_hosts_report.csv"
+        top_hosts.to_csv(save_path, index=False)
+        print(f"✅ Đã lưu báo cáo Host tại: {save_path}")
+    except Exception as e:
+        print(f"⚠️ Lỗi xuất Top Host: {e}")
+
+
+def export_content_report(df, output_dir):
+    """Xuất báo cáo Loại nội dung để hiểu hành vi user."""
+    print("🕵️‍♂️ [REPORT] Đang phân tích nội dung Request...")
+
+    def extract_extension(req_str):
+        try:
+            # Lấy chuỗi giữa "GET " và " HTTP" (hoặc format tương tự)
+            parts = req_str.split()
+            if len(parts) > 1:
+                url = parts[1]
+                if '.' in url:
+                    return url.split('.')[-1].lower()
+            return 'unknown'
+        except:
+            return 'error'
+
+    try:
+        if 'request' not in df.columns: return
+
+        # Tạo bản sao nhẹ để xử lý string
+        temp_series = df['request'].apply(extract_extension)
+        content_stats = temp_series.value_counts().head(15).reset_index()
+        content_stats.columns = ['file_type', 'count']
+
+        save_path = output_dir / "content_report.csv"
+        content_stats.to_csv(save_path, index=False)
+        print(f"✅ Đã lưu báo cáo Content tại: {save_path}")
+    except Exception as e:
+        print(f"⚠️ Lỗi xuất Content Report: {e}")
+
+# ============================================================
 # 2. CLASS: PARSER 
 # ============================================================
 class LogParser:
@@ -194,7 +249,13 @@ def run_full_pipeline(file_type='train'):
     # 3. Chạy Pipeline (Chỉ load và clean 1 lần duy nhất để tiết kiệm RAM)
     raw_df = parser.load_data(file_path)
     clean_df = processor.clean_dataframe(raw_df)
-    
+
+    if file_type == 'train':
+        print(f"📊 Đang tạo báo cáo chi tiết (Host & Content) cho tập Train...")
+        # Gọi 2 hàm đã khai báo
+        export_top_hosts(clean_df, DATA_DIR)
+        export_content_report(clean_df, DATA_DIR)
+
     # 4. Aggregate cho cả 3 khung thời gian
     intervals = CONFIG['processing']['intervals']
     processed_package = {}
