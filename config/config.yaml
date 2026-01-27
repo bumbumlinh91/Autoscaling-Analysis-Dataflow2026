@@ -29,10 +29,12 @@ model_params:
     n_estimators: 100
     max_depth: 5
     learning_rate: 0.1
-# 4. CẤU HÌNH LỌC NHIỄU VÀ PHÂN TÍCH
+# 4. CẤU HÌNH PHÂN TÍCH NÂNG CAO 
 analysis:
-  # Ngưỡng tỉ lệ lỗi để xác định một khung giờ bị nhiễm bởi Bot/DDoS
-  # (Mặc định 0.8 = 80%)
+  # Ngưỡng tỉ lệ lỗi tối đa cho phép (0.8 = 80%)
+  # Dùng để nhận diện và loại bỏ các khung thời gian bị nhiễu do Bot/DDoS
   bot_error_threshold: 0.8
-  # Hệ số quan trọng của Bytes so với Hits (Dùng cho Resource Intensity)
+  
+  # Trọng số tài nguyên 
+  # Dùng để tính toán chỉ số Intensity, phản ánh áp lực thực tế lên hạ tầng
   resource_weight: 1.2
