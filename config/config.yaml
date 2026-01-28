@@ -19,17 +19,44 @@ processing:
     end: "1995-08-03 04:36:13"
 
 # 3. THAM SỐ MÔ HÌNH (ví dụ)
-model_params:
+models:
   prophet:
-    changepoint_prior_scale: 0.05
-    yearly_seasonality: false
-    weekly_seasonality: true
-    daily_seasonality: true
+    enabled: true
+    freq: "T"
+    params:
+      daily_seasonality: true
+      weekly_seasonality: true
+      yearly_seasonality: false
+      changepoint_prior_scale: 0.05
+      interval_width: 0.95
   xgboost:
-    n_estimators: 100
-    max_depth: 5
-    learning_rate: 0.1
-# 4. CẤU HÌNH LỌC NHIỄU VÀ PHÂN TÍCH
+    enabled: true
+    n_lags: 30
+    params:
+      n_estimators: 500
+      max_depth: 7
+      learning_rate: 0.01
+      subsample: 0.8
+      colsample_bytree: 0.8
+      objective: "reg:squarederror"
+      random_state: 42
+
+  lstm:
+    enabled: true
+    n_lags: 30
+    params:
+      units: 32
+      epochs: 25
+      batch_size: 64
+      dropout: 0.3
+      learning_rate: 0.001
+      optimizer: "adam"
+      loss: "mse"
+      early_stopping:
+        enabled: true
+        patience: 10
+
+# 4. CẤU HÌNH PHÂN TÍCH NÂNG CAO 
 analysis:
   # Ngưỡng tỉ lệ lỗi để xác định một khung giờ bị nhiễm bởi Bot/DDoS
   # (Mặc định 0.8 = 80%)
