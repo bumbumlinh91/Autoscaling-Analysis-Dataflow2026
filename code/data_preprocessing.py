@@ -213,21 +213,24 @@ class DataProcessor:
         # Reset chỉ mục và chuẩn hóa tên cột thời gian sang 'ds'
         agg_df = agg_df.reset_index().rename(columns={'timestamp': 'ds'})
         
-       # --- TÍNH TOÁN CÁC BIẾN ĐẶC TRƯNG NÂNG CAO (FEATURE ENGINEERING) ---
+       # --- TÍNH TOÁN CÁC BIẾN FEATURES NÂNG CAO (FEATURE ENGINEERING) ---
+        logger.info("🔧 Đang tạo các features nâng cao...")
+        
         # 1. Tỉ lệ lỗi (Error Rate): Phản ánh độ ổn định và sức khỏe của hệ thống
         agg_df['error_rate'] = (agg_df['error_4xx'] + agg_df['error_5xx']) / (agg_df['y'] + 1e-8)
         
-        # 2. Cường độ tải (Resource Intensity): Chỉ số tải thực tế dựa trên lưu lượng và băng thông
+        # 2. Resource Intensity: Chỉ số tải thực tế dựa trên lưu lượng và băng thông
         # Sử dụng trọng số từ cấu hình để phản ánh áp lực lên tài nguyên phần cứng
         weight = CONFIG.get('analysis', {}).get('resource_weight', 1.0)
         agg_df['intensity'] = agg_df['y'] * agg_df['avg_bytes'] * weight
-
-        # 3. Phân loại trạng thái hệ thống (Downtime Labeling)
-        # Gắn nhãn các giai đoạn xảy ra sự cố dựa trên khung thời gian cấu hình
-        agg_df['is_downtime'] = ((agg_df['ds'] >= DOWNTIME_START) & (agg_df['ds'] <= DOWNTIME_END)).astype(int)
+        
+        logger.info("✅ Features engineered: error_rate, intensity")
         
         # Xử lý các giá trị thiếu bằng phương pháp điền số 0 để đảm bảo tính liên tục của dữ liệu
-        return agg_df.fillna(0)
+        agg_df = agg_df.fillna(0)
+        
+        
+        return agg_df
 
 # ============================================================
 # 4. MAIN EXECUTION
@@ -249,6 +252,8 @@ def run_full_pipeline(file_type='train'):
     # 3. Chạy Pipeline (Chỉ load và clean 1 lần duy nhất để tiết kiệm RAM)
     raw_df = parser.load_data(file_path)
     clean_df = processor.clean_dataframe(raw_df)
+    
+
 
     if file_type == 'train':
         print(f"📊 Đang tạo báo cáo chi tiết (Host & Content) cho tập Train...")
@@ -264,17 +269,15 @@ def run_full_pipeline(file_type='train'):
         logger.info(f"--- Đang vận hành Pipeline cho khung thời gian: {interval} ---")
         agg_df = processor.aggregate_data(clean_df, window=interval)
         
-        # --- QUY TRÌNH LỌC NHIỄU DỮ LIỆU (DATA DENOISING) ---
-        # Tự động loại bỏ các mẫu dữ liệu không đạt tiêu chuẩn (Nghi vấn Bot/DDoS)
-        threshold = CONFIG.get('analysis', {}).get('bot_error_threshold', 0.8)
-        clean_agg_df = agg_df[agg_df['error_rate'] < threshold].copy()
         
-        # Xuất dữ liệu đã làm sạch ra file CSV phục vụ huấn luyện mô hình
+        agg_df = agg_df[agg_df['y'] > 0].copy()
+        
+        # Xuất dữ liệu RAW (chưa lọc/engineer) ra file CSV phục vụ quá trình EDA
         output_name = f"processed_{file_type}_{interval}.csv"
-        clean_agg_df.to_csv(DATA_DIR / output_name, index=False)
+        agg_df.to_csv(DATA_DIR / output_name, index=False)
         
-        logger.info(f"Hoàn tất xuất tập dữ liệu sạch: {output_name} (Đã lọc {len(agg_df) - len(clean_agg_df)} mẫu nhiễu)")
-        processed_package[interval] = clean_agg_df
+        logger.info(f"✅ Hoàn tất xuất: {output_name} (RAW data cho EDA)")
+        processed_package[interval] = agg_df
         
     return processed_package
 
