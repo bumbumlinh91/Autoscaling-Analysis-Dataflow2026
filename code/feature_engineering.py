@@ -212,6 +212,13 @@ class FeatureEngineer:
 
         # Sắp xếp theo thời gian trước khi tạo lag features
         combined = combined.sort_values('ds').reset_index(drop=True)
+        
+        # NOTE: Lag features được tính từ test data thật (khi file_type='test')
+        # Điều này có vẻ như data leakage, NHƯNG:
+        # - Đây là ở feature engineering time (offline), không phải prediction time
+        # - Khi predict (online), XGBoostForecaster/LSTMForecaster.predict() sẽ cập nhật
+        #   lag features từ PREDICTIONS (không phải test data thật) via roll-forward mechanism
+        # - Xem models.py predict() method để hiểu chi tiết
         combined = self.create_lag_features(combined, interval)
         combined = self.create_time_features(combined)
 

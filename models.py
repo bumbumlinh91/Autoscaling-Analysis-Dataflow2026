@@ -256,10 +256,43 @@ class XGBoostForecaster(BaseForecaster):
         self.last_sequence = None
 
     def _get_eng_feature_cols(self, df, target_col):
-        """Lấy tên cột features thô (không bao gồm mục tiêu và dấu thời gian)"""
-        # Loại trừ: các biến mục tiêu (intensity, y), cờ lọc (is_downtime), và dấu thời gian
+        """Lấy tên cột features thô (không bao gồm mục tiêu, dấu thời gian, và LAG features)"""
+        # Loại trừ: các biến mục tiêu (intensity, y), cờ lọc (is_downtime), dấu thời gian, và LAG features
+        # (LAG features sẽ được cập nhật từ predictions ở prediction time)
         exclude = ['intensity', 'y', 'requests', 'is_downtime', 'timestamp', 'ds']
-        return [col for col in df.columns if col not in exclude and col != target_col]
+        eng_cols = [col for col in df.columns if col not in exclude and col != target_col]
+        # Lọc ra LAG features (lag_96, lag_672, lag_1440, lag_*, rolling_*)
+        eng_cols = [col for col in eng_cols if not col.startswith('lag_') and not col.startswith('rolling_')]
+        return eng_cols
+    
+    def _get_lag_feature_cols(self, df):
+        """Lấy tên cột LAG features (lag_96, lag_672, lag_1440, etc)"""
+        return [col for col in df.columns if col.startswith('lag_')]
+    
+    def _get_lag_features_from_sequence(self, sequence, lag_cols):
+        """
+        Tính lag features từ sequence (predictions) dựa trên lag_cols.
+        
+        Args:
+            sequence: np.array giá trị (train + predicted)
+            lag_cols: list tên lag features (e.g., ['lag_96', 'lag_672', 'lag_1440'])
+        
+        Returns:
+            dict {lag_col: value} được tính từ sequence
+        """
+        lag_features = {}
+        for lag_col in lag_cols:
+            # Parse lag value từ column name (e.g., 'lag_96' → 96)
+            try:
+                lag_value = int(lag_col.split('_')[1])
+                if len(sequence) > lag_value:
+                    lag_features[lag_col] = sequence[-lag_value]
+                else:
+                    # Fallback nếu sequence chưa đủ dài
+                    lag_features[lag_col] = sequence[0] if len(sequence) > 0 else 0.0
+            except (ValueError, IndexError):
+                lag_features[lag_col] = 0.0
+        return lag_features
 
     def create_features(self, df, target_col):
        
@@ -269,11 +302,14 @@ class XGBoostForecaster(BaseForecaster):
         # Lấy dữ liệu 
         data = df[target_col].values
         
-        # Các cột features để bao gồm (cùng logic như trong fit())
+        # Các cột features để bao gồm (cùng logic như trong fit()) - KHÔNG chứa lag
         feature_cols = self._get_eng_feature_cols(df, target_col)
+        
+        # Lấy tên lag columns để tính từ data array (không từ df)
+        lag_cols = self._get_lag_feature_cols(df)
 
         for i in range(self.n_lags, len(data)):
-            # Tạo các lag features
+            # Tạo các lag features từ data (rolling window)
             lags = data[i-self.n_lags:i]
 
             # Tính toán rolling statistics
@@ -285,14 +321,29 @@ class XGBoostForecaster(BaseForecaster):
             # Xu hướng đơn giản
             trend = lags[-1] - lags[0]
 
-            # Lấy các features tại thời điểm i
+            # Tính LAG FEATURES từ data array (không từ df columns) ✅
+            lag_features_dict = {}
+            for lag_col in lag_cols:
+                try:
+                    lag_value = int(lag_col.split('_')[1])
+                    if i >= lag_value:
+                        lag_features_dict[lag_col] = data[i - lag_value]
+                    else:
+                        lag_features_dict[lag_col] = data[0]
+                except (ValueError, IndexError):
+                    lag_features_dict[lag_col] = 0.0
+            
+            lag_values = np.array([lag_features_dict.get(col, 0.0) for col in lag_cols]) if lag_cols else np.array([])
+
+            # Lấy TRUE ENGINEERED FEATURES (không chứa lag) ✅
             eng_features = df.iloc[i][feature_cols].values if i < len(df) else np.zeros(len(feature_cols))
 
             # Kết hợp tất cả các features
             feature_vector = np.concatenate([
                 lags,  
                 [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
-                eng_features
+                lag_values,  # ✅ LAG features từ data array
+                eng_features  # ✅ TRUE engineered features
             ])
 
             features.append(feature_vector)
@@ -312,6 +363,7 @@ class XGBoostForecaster(BaseForecaster):
             self.model = xgb.XGBRegressor(**self.params)
             self.model.fit(X, y, verbose=False)
             self.last_sequence = train_df[target_col].values[-self.n_lags:].copy()
+            self.lag_cols = self._get_lag_feature_cols(train_df)  # Lưu lag column names ✅
             self.feature_cols = self._get_eng_feature_cols(train_df, target_col)
             self.last_eng_features = train_df.iloc[-1][self.feature_cols].values.astype(np.float64)
             self.is_fitted = True
@@ -324,7 +376,12 @@ class XGBoostForecaster(BaseForecaster):
             return False
 
     def predict(self, test_df=None, steps=24, target_col='intensity'):
-        """Dự báo với XGBoost"""
+        """Dự báo với XGBoost
+        
+        FIX Cách 2: Cập nhật lag features (kể cả lag_96, lag_672, lag_1440) từ PREDICTIONS 
+        (chứ không phải từ test data thật) để đảm bảo consistency với behavior khi deploy.
+        Engineered features (time-based, không phải lag) được giữ từ test_df.
+        """
         if not self.is_fitted:
             logger.error("Mô hình chưa được huấn luyện")
             return None
@@ -335,26 +392,44 @@ class XGBoostForecaster(BaseForecaster):
                 sequence = self.last_sequence.copy()
                 
                 for idx in range(len(test_df)):
+                    # Lấy LAG FEATURES từ SEQUENCE ĐỰ BÁO (updated từ predictions) ✅
                     lags = sequence[-self.n_lags:]
+                    
+                    # Tính ROLLING STATS từ SEQUENCE ĐỰ BÁO ✅
                     rolling_mean = np.mean(lags)
                     rolling_std = np.std(lags)
                     rolling_min = np.min(lags)
                     rolling_max = np.max(lags)
                     trend = lags[-1] - lags[0]
                     
-                    eng_features = test_df.iloc[idx][self.feature_cols].values.astype(np.float64)
-                    
-                    feature_vector = np.concatenate([
-                        lags,
-                        [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
-                        eng_features
-                    ]).reshape(1, -1)
+                    # Cập nhật LAG FEATURES từ sequence (nếu có trong feature_cols) ✅
+                    if hasattr(self, 'lag_cols') and self.lag_cols:
+                        lag_feature_dict = self._get_lag_features_from_sequence(sequence, self.lag_cols)
+                        # Xây dựng eng_features nhưng thay thế lag values từ predictions
+                        eng_features = test_df.iloc[idx][self.feature_cols].values.astype(np.float64)
+                        # Thêm lag features vào (từ sequence)
+                        lag_values = np.array([lag_feature_dict.get(col, 0.0) for col in self.lag_cols])
+                        feature_vector = np.concatenate([
+                            lags,
+                            [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
+                            lag_values,  # lag features từ predictions ✅
+                            eng_features  # true engineered features từ test_df ✅
+                        ]).reshape(1, -1)
+                    else:
+                        # Fallback nếu không có lag_cols
+                        eng_features = test_df.iloc[idx][self.feature_cols].values.astype(np.float64)
+                        feature_vector = np.concatenate([
+                            lags,
+                            [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
+                            eng_features
+                        ]).reshape(1, -1)
                     
                     # XGBoost không scale - dự báo trực tiếp
                     pred = self.model.predict(feature_vector)[0]
                     pred = max(pred, 0)
                     
                     predictions.append(pred)
+                    # Cập nhật SEQUENCE với PREDICTION để tính lag ở bước tiếp theo ✅
                     sequence = np.append(sequence[1:], pred)
                 
                 return np.array(predictions)
@@ -363,6 +438,7 @@ class XGBoostForecaster(BaseForecaster):
                 sequence = self.last_sequence.copy()
 
                 for _ in range(steps):
+                    # Cập nhật LAG + ROLLING STATS từ sequence (dự báo) ✅
                     rolling_mean = np.mean(sequence)
                     rolling_std = np.std(sequence)
                     rolling_min = np.min(sequence)
@@ -370,12 +446,23 @@ class XGBoostForecaster(BaseForecaster):
                     trend = sequence[-1] - sequence[0]
 
                     eng_features = self.last_eng_features.copy() if hasattr(self, 'last_eng_features') else np.array([])
-
-                    feature_vector = np.concatenate([
-                        sequence,
-                        [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
-                        eng_features
-                    ]).reshape(1, -1)
+                    
+                    # Cập nhật lag features từ sequence (nếu có) ✅
+                    if hasattr(self, 'lag_cols') and self.lag_cols:
+                        lag_feature_dict = self._get_lag_features_from_sequence(sequence, self.lag_cols)
+                        lag_values = np.array([lag_feature_dict.get(col, 0.0) for col in self.lag_cols])
+                        feature_vector = np.concatenate([
+                            sequence,
+                            [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
+                            lag_values,  # lag features từ predictions ✅
+                            eng_features  # engineered features ✅
+                        ]).reshape(1, -1)
+                    else:
+                        feature_vector = np.concatenate([
+                            sequence,
+                            [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
+                            eng_features
+                        ]).reshape(1, -1)
 
                     # XGBoost không scale - dự báo trực tiếp
                     pred = self.model.predict(feature_vector)[0]
@@ -447,9 +534,41 @@ class LSTMForecaster(BaseForecaster):
         self.feature_cols = []
 
     def _get_eng_feature_cols(self, df, target_col):
-        """Lấy tên cột features thô"""
+        """Lấy tên cột features thô (không bao gồm mục tiêu, dấu thời gian, và LAG features)"""
         exclude = ['intensity', 'y', 'requests', 'is_downtime', 'timestamp', 'ds']
-        return [col for col in df.columns if col not in exclude and col != target_col]
+        eng_cols = [col for col in df.columns if col not in exclude and col != target_col]
+        # Lọc ra LAG features (lag_96, lag_672, lag_1440, lag_*, rolling_*)
+        eng_cols = [col for col in eng_cols if not col.startswith('lag_') and not col.startswith('rolling_')]
+        return eng_cols
+    
+    def _get_lag_feature_cols(self, df):
+        """Lấy tên cột LAG features (lag_96, lag_672, lag_1440, etc)"""
+        return [col for col in df.columns if col.startswith('lag_')]
+    
+    def _get_lag_features_from_sequence(self, sequence, lag_cols):
+        """
+        Tính lag features từ sequence (predictions) dựa trên lag_cols.
+        
+        Args:
+            sequence: np.array giá trị unscaled (train + predicted)
+            lag_cols: list tên lag features (e.g., ['lag_96', 'lag_672', 'lag_1440'])
+        
+        Returns:
+            dict {lag_col: value} được tính từ sequence
+        """
+        lag_features = {}
+        for lag_col in lag_cols:
+            # Parse lag value từ column name (e.g., 'lag_96' → 96)
+            try:
+                lag_value = int(lag_col.split('_')[1])
+                if len(sequence) > lag_value:
+                    lag_features[lag_col] = sequence[-lag_value]
+                else:
+                    # Fallback nếu sequence chưa đủ dài
+                    lag_features[lag_col] = sequence[0] if len(sequence) > 0 else 0.0
+            except (ValueError, IndexError):
+                lag_features[lag_col] = 0.0
+        return lag_features
 
     def create_features(self, df, target_col):
         """Tạo feature matrix multivariate cho LSTM"""
@@ -458,6 +577,7 @@ class LSTMForecaster(BaseForecaster):
         
         data = df[target_col].values
         feature_cols = self._get_eng_feature_cols(df, target_col)
+        lag_cols = self._get_lag_feature_cols(df)
 
         for i in range(self.n_lags, len(data)):
             lags = data[i-self.n_lags:i]
@@ -468,12 +588,28 @@ class LSTMForecaster(BaseForecaster):
             rolling_max = np.max(lags)
             trend = lags[-1] - lags[0]
             
+            # Tính LAG FEATURES từ data array (không từ df columns) ✅
+            lag_features_dict = {}
+            for lag_col in lag_cols:
+                try:
+                    lag_value = int(lag_col.split('_')[1])
+                    if i >= lag_value:
+                        lag_features_dict[lag_col] = data[i - lag_value]
+                    else:
+                        lag_features_dict[lag_col] = data[0]
+                except (ValueError, IndexError):
+                    lag_features_dict[lag_col] = 0.0
+            
+            lag_values = np.array([lag_features_dict.get(col, 0.0) for col in lag_cols]) if lag_cols else np.array([])
+            
+            # Lấy TRUE ENGINEERED FEATURES (không chứa lag) ✅
             eng_features = df.iloc[i][feature_cols].values if i < len(df) else np.zeros(len(feature_cols))
             
             feature_vector = np.concatenate([
                 lags,
                 [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
-                eng_features
+                lag_values,  # ✅ LAG features từ data array
+                eng_features  # ✅ TRUE engineered features
             ])
             
             features.append(feature_vector)
@@ -532,9 +668,10 @@ class LSTMForecaster(BaseForecaster):
             )
 
             self.last_sequence = X_scaled[-1:].copy()
+            self.lag_cols = self._get_lag_feature_cols(train_df)  # Lưu lag column names ✅
             self.feature_cols = self._get_eng_feature_cols(train_df, target_col)
             self.is_fitted = True
-            logger.info(f"✓ LSTM: {self.n_lags} lags + 5 rolling stats + {len(self.feature_cols)} features")
+            logger.info(f"✓ LSTM: {self.n_lags} lags + 5 rolling stats + {len(self.lag_cols)} lag features + {len(self.feature_cols)} other features")
             return True
             
         except Exception as e:
@@ -542,28 +679,71 @@ class LSTMForecaster(BaseForecaster):
             return False
     
     def predict(self, test_df=None, steps=24, target_col='intensity'):
-        """Dự báo với LSTM multivariate"""
+        """Dự báo với LSTM multivariate
+        
+        FIX Cách 2: Khi test_df được cung cấp, cập nhật lag features (kể cả lag_96, lag_672, etc)
+        và rolling stats từ PREDICTIONS (chứ không phải từ test data thật) để đảm bảo consistency.
+        Engineered features (time-based, không phải lag) được giữ từ test_df.
+        """
         if not self.is_fitted:
             logger.error("Mô hình chưa được huấn luyện")
             return None
         
         try:
             if test_df is not None and len(test_df) > 0:
-                X_test, _ = self.create_features(test_df, target_col)
-                X_test_scaled = self.feature_scaler.transform(X_test)
-                
-                # Reshape để LSTM: (samples, n_features, 1)
-                X_test_lstm = X_test_scaled.reshape((X_test_scaled.shape[0], X_test_scaled.shape[1], 1))
-                
-                pred_scaled = self.model.predict(X_test_lstm, verbose=0).flatten()
-                predictions = self.target_scaler.inverse_transform(pred_scaled.reshape(-1, 1)).flatten()
-                predictions = np.maximum(predictions, 0)
-                
-                return predictions
-            else:
-                
                 predictions = []
-                sequence = self.last_sequence.flatten().copy()  # shape (n_features,)
+                
+                # Khởi tạo sequence từ train data (context) - scaled values
+                sequence = self.last_sequence.flatten().copy()  # shape (n_features,) - scaled
+                feature_cols = self._get_eng_feature_cols(test_df, target_col)
+                lag_cols = self._get_lag_feature_cols(test_df)
+                
+                # Để cập nhật lag features từ predictions, ta cần track unscaled values
+                sequence_unscaled_target = np.array([])  # Will accumulate target predictions
+                
+                for idx in range(len(test_df)):
+                    # Lấy LAG FEATURES từ SEQUENCE ĐỰ BÁO (không phải test data thật) ✅
+                    lags = sequence[:self.n_lags]
+                    
+                    # Tính ROLLING STATS từ LAG ĐỰ BÁO ✅
+                    rolling_mean = np.mean(lags)
+                    rolling_std = np.std(lags)
+                    rolling_min = np.min(lags)
+                    rolling_max = np.max(lags)
+                    trend = lags[-1] - lags[0]
+                    
+                    # Giữ TRUE ENGINEERED FEATURES từ test_df (time-based, không phải lag) ✅
+                    eng_features_raw = test_df.iloc[idx][feature_cols].values if len(feature_cols) > 0 else np.array([])
+                    
+                    # Xây dựng feature vector với lag + rolling stats từ sequence (predictions)
+                    feature_vector = np.concatenate([
+                        lags,
+                        [rolling_mean, rolling_std, rolling_min, rolling_max, trend],
+                        eng_features_raw
+                    ])
+                    
+                    # Scale và reshape cho LSTM
+                    feature_vector_scaled = self.feature_scaler.transform([feature_vector])[0]
+                    X_lstm = feature_vector_scaled.reshape(1, len(feature_vector_scaled), 1)
+                    
+                    # Dự báo
+                    pred_scaled = self.model.predict(X_lstm, verbose=0)[0, 0]
+                    pred_unscaled = self.target_scaler.inverse_transform([[pred_scaled]])[0, 0]
+                    pred_unscaled = max(pred_unscaled, 0)
+                    
+                    predictions.append(pred_unscaled)
+                    
+                    # Cập nhật SEQUENCE với PREDICTION để tính lag ở bước tiếp theo ✅
+                    # Cập nhật scaled sequence (shift left, add pred_scaled)
+                    sequence = np.concatenate([sequence[1:], [pred_scaled]])
+                    
+                    # Track unscaled target values để có thể cập nhật lag features chính xác
+                    sequence_unscaled_target = np.append(sequence_unscaled_target, pred_unscaled)
+                
+                return np.array(predictions)
+            else:
+                predictions = []
+                sequence = self.last_sequence.flatten().copy()  # shape (n_features,) - scaled
                 
                 for _ in range(steps):
                     X_pred = sequence.reshape(1, len(sequence), 1)
@@ -573,18 +753,18 @@ class LSTMForecaster(BaseForecaster):
                     pred_unscaled = max(pred_unscaled, 0)
                     predictions.append(pred_unscaled)
                     
-                    # Cập nhật chuỗi với dự báo mới
+                    # Cập nhật chuỗi với dự báo mới (LAG + ROLLING STATS từ predictions) ✅
                     lags = sequence[:self.n_lags]
                     lags_updated = np.concatenate([lags[1:], [pred_scaled]])
                     
-                    # tính toán rolling stats mới
+                    # Tính rolling stats mới từ predictions
                     rolling_mean = np.mean(lags_updated)
                     rolling_std = np.std(lags_updated)
                     rolling_min = np.min(lags_updated)
                     rolling_max = np.max(lags_updated)
                     trend = lags_updated[-1] - lags_updated[0]
                     
-                    # Lấy các features thô cuối cùng 
+                    # Lấy engineered features (không đổi khi không có test_df)
                     n_eng_features = len(sequence) - self.n_lags - 5
                     eng_features = sequence[-n_eng_features:] if n_eng_features > 0 else np.array([])
                     
@@ -595,6 +775,12 @@ class LSTMForecaster(BaseForecaster):
                     ])
                 
                 return np.array(predictions)
+            
+        except Exception as e:
+            logger.error(f"Lỗi khi dự báo với LSTM: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
             
         except Exception as e:
             logger.error(f"Lỗi khi dự báo với LSTM: {e}")
