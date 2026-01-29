@@ -79,11 +79,11 @@ class FeatureEngineer:
 
     def filter_intensity(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Lọc các giá trị `intensity` không hợp lệ hoặc ngoại lai.
+        Lọc các giá trị intensity không hợp lệ hoặc ngoại lai.
 
         - Loại NaN trong cột `intensity`
         - Loại giá trị âm
-        - Loại các ngoại lai phía trên percentile (mặc định 99.5%)
+        - Loại các ngoại lai trên percentile cao (mặc định 99.5%)
         """
         logger.info("🔍 Đang lọc intensity (NaN, âm, ngoại lai)")
 
@@ -99,7 +99,7 @@ class FeatureEngineer:
 
         # loại ngoại lai phía trên (upper percentile)
         try:
-            upper_pct = float(self.config.get('analysis', {}).get('intensity_upper_pct', 0.995))
+            upper_pct = 0.995
             upper_val = df_filtered['intensity'].quantile(upper_pct)
             outliers = df_filtered[df_filtered['intensity'] > upper_val]
             if len(outliers) > 0:
@@ -113,6 +113,7 @@ class FeatureEngineer:
 
         return df_filtered
 
+    
     
     def create_lag_features(self, df: pd.DataFrame, interval: str) -> pd.DataFrame:
         """
