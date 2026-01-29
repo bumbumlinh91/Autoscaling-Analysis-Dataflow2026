@@ -77,7 +77,42 @@ class FeatureEngineer:
         
         return df_filtered
 
-    
+    def filter_intensity(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Lọc các giá trị `intensity` không hợp lệ hoặc ngoại lai.
+
+        - Loại NaN trong cột `intensity`
+        - Loại giá trị âm
+        - Loại các ngoại lai phía trên percentile (mặc định 99.5%)
+        """
+        logger.info("🔍 Đang lọc intensity (NaN, âm, ngoại lai)")
+
+        if 'intensity' not in df.columns:
+            logger.warning("  ⚠️ Không tìm thấy cột 'intensity' — bỏ qua bước lọc intensity")
+            return df
+
+        before = len(df)
+
+        # loại NaN và giá trị âm
+        df_filtered = df.dropna(subset=['intensity']).copy()
+        df_filtered = df_filtered[df_filtered['intensity'] >= 0]
+
+        # loại ngoại lai phía trên (upper percentile)
+        try:
+            upper_pct = float(self.config.get('analysis', {}).get('intensity_upper_pct', 0.995))
+            upper_val = df_filtered['intensity'].quantile(upper_pct)
+            outliers = df_filtered[df_filtered['intensity'] > upper_val]
+            if len(outliers) > 0:
+                logger.info(f"  ✓ Loại {len(outliers):,} observation > {int(upper_pct*100)}th percentile (>{upper_val:.2f})")
+                df_filtered = df_filtered[df_filtered['intensity'] <= upper_val]
+        except Exception:
+            logger.exception("  ⚠️ Không thể tính percentile intensity — bỏ qua lọc ngoại lai")
+
+        removed = before - len(df_filtered)
+        logger.info(f"  ✓ Đã loại bỏ {removed:,} observation (intensity)")
+
+        return df_filtered
+
     
     def create_lag_features(self, df: pd.DataFrame, interval: str) -> pd.DataFrame:
         """
