@@ -69,9 +69,11 @@ class BaseForecaster(ABC):
         pass
     
     @abstractmethod
-    def predict(self, steps):
-        """Tạo dự báo cho 'steps' kỳ tiếp theo"""
-        pass
+    def predict(self, *args, **kwargs):
+        """Tạo dự báo. Các lớp con có thể nhận signature khác nhau
+        (ví dụ `steps`, hoặc `test_df` + `steps`).
+        """
+        raise NotImplementedError
     
     def evaluate(self, y_true, y_pred):
         """Tính toán các chỉ số đánh giá: RMSE, MSE, MAE, MAPE"""
@@ -744,7 +746,7 @@ if __name__ == "__main__":
         model = create_forecaster(model_name, config_path=config_path)
         
         # Sử dụng dữ liệu thích hợp dựa trên loại mô hình
-        if model_name in ['prophet', 'sarima']:
+        if model_name in ['prophet']:
             fit_result = model.fit(train_data)
         else:
             fit_result = model.fit(train_df, target_col='requests')

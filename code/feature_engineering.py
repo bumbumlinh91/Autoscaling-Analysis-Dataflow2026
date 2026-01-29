@@ -40,8 +40,9 @@ class FeatureEngineer:
     
     def __init__(self, config):
         self.config = config
-        self.downtime_start = pd.Timestamp(config['processing']['downtime']['start'])
-        self.downtime_end = pd.Timestamp(config['processing']['downtime']['end'])
+       
+        self.downtime_start = pd.Timestamp("1995-07-28 13:35:00")
+        self.downtime_end = pd.Timestamp("1995-08-03 04:37:00")
         self.bot_error_threshold = config.get('analysis', {}).get('bot_error_threshold', 0.8)
     
     def filter_downtime(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -75,6 +76,8 @@ class FeatureEngineer:
         logger.info(f"  ✓ Đã loại bỏ {removed_count:,} observation (noise)")
         
         return df_filtered
+
+    
     
     def create_lag_features(self, df: pd.DataFrame, interval: str) -> pd.DataFrame:
         """
@@ -129,7 +132,7 @@ class FeatureEngineer:
         # Day of week: 0-6 (Monday=0, Sunday=6)
         df['day_of_week'] = df[time_col].dt.dayofweek
         
-        # Is weekend: 1 if Saturday-Sunday, 0 otherwise
+        # Is weekend: 1 nếu Saturday-Sunday, 0 nếu weekday
         df['is_weekend'] = (df[time_col].dt.dayofweek >= 5).astype(int)
         
         logger.info(f"  ✓ hour, day_of_week, is_weekend")
@@ -147,41 +150,55 @@ class FeatureEngineer:
             file_type: 'train' hoặc 'test'
         """
         logger.info(f"▶ Đang xử lý {file_type.upper()} - {interval}...")
-        
+
         if not input_path.exists():
             logger.error(f"  ❌ File không tồn tại: {input_path}")
             return False
-        
-        df = pd.read_csv(input_path)
-        df['ds'] = pd.to_datetime(df['ds'])
-        logger.info(f"  Loaded {len(df):,} observations")
-        
-        df = self.filter_downtime(df)
-        df = self.filter_bot_ddos(df)
-        
+
+        # Load main input (raw, chưa lọc) and mark source
+        df_main = pd.read_csv(input_path)
+        df_main['ds'] = pd.to_datetime(df_main['ds'])
+        df_main = df_main.copy()
+        df_main['__source__'] = 'train' if file_type == 'train' else 'test'
+        logger.info(f"  Loaded {len(df_main):,} observations from input")
+
+        combined = df_main
+
+        # nếu là test, load thêm train để tạo lag features chính xác
+        train_input = input_path.parent / f"processed_train_{interval}.csv"
+        if file_type == 'test' and train_input.exists():
+            train_df_raw = pd.read_csv(train_input)
+            train_df_raw['ds'] = pd.to_datetime(train_df_raw['ds'])
+            train_df_raw = train_df_raw.copy()
+            train_df_raw['__source__'] = 'train'
+            combined = pd.concat([train_df_raw, df_main], ignore_index=True)
+            logger.info(f"  Loaded train ({len(train_df_raw):,}) and concatenated for lag calculation")
+
+        # Sắp xếp theo thời gian trước khi tạo lag features
+        combined = combined.sort_values('ds').reset_index(drop=True)
+        combined = self.create_lag_features(combined, interval)
+        combined = self.create_time_features(combined)
+
+        # Sau khi tạo lag features, lọc dữ liệu
+        combined = self.filter_downtime(combined)
+        combined = self.filter_bot_ddos(combined)
+        combined = self.filter_intensity(combined)
+
+        # Tách lại train/test và xuất
         if file_type == 'test':
-            train_input = input_path.parent / f"processed_train_{interval}.csv"
-            if train_input.exists():
-                train_df = pd.read_csv(train_input)
-                train_df['ds'] = pd.to_datetime(train_df['ds'])
-                train_df = self.filter_downtime(train_df)
-                train_df = self.filter_bot_ddos(train_df)
-                df = pd.concat([train_df, df], ignore_index=True)
-                logger.info(f"  Merged with train data for lag calculation")
-        
-        df = self.create_lag_features(df, interval)
-        df = self.create_time_features(df)
-        
-        if file_type == 'test':
-            df = df.iloc[len(train_df):].reset_index(drop=True)
-            logger.info(f"  Extracted test data: {len(df):,} observations")
+            out_df = combined[combined['__source__'] == 'test'].copy().reset_index(drop=True)
+            logger.info(f"  Extracted test data: {len(out_df):,} observations")
         else:
-            df = df.dropna().reset_index(drop=True)
-            logger.info(f"  ✓ Sau xử lý: {len(df):,} observations")
-        
-        df.to_csv(output_path, index=False)
+            out_df = combined[combined['__source__'] == 'train'].copy().reset_index(drop=True)
+            out_df = out_df.dropna().reset_index(drop=True)
+            logger.info(f"  ✓ Sau xử lý: {len(out_df):,} observations")
+
+        if '__source__' in out_df.columns:
+            out_df = out_df.drop(columns=['__source__'])
+
+        out_df.to_csv(output_path, index=False)
         logger.info(f"  ✅ Xuất: {output_path}")
-        
+
         return True
 
 # ============================================================
@@ -194,25 +211,25 @@ def run_feature_engineering(file_type='train'):
     logger.info(f"\n{'='*60}")
     logger.info(f"FEATURE ENGINEERING: {file_type.upper()}")
     logger.info(f"{'='*60}")
-    
+
     BASE_DIR = Path(__file__).resolve().parent.parent
     DATA_DIR = BASE_DIR / "data"
-    
+
     engineer = FeatureEngineer(CONFIG)
     intervals = CONFIG['processing']['intervals']
-    
+
     for interval in intervals:
         input_file = f"processed_{file_type}_{interval}.csv"
         output_file = f"prepared_{file_type}_{interval}.csv"
-        
+
         input_path = DATA_DIR / input_file
         output_path = DATA_DIR / output_file
-        
+
         try:
             success = engineer.process_single_interval(
-                input_path, 
-                output_path, 
-                interval, 
+                input_path,
+                output_path,
+                interval,
                 file_type
             )
             if not success:
@@ -222,22 +239,23 @@ def run_feature_engineering(file_type='train'):
             import traceback
             traceback.print_exc()
 
+
 if __name__ == "__main__":
     print("\n" + "="*70)
     print(" FEATURE ENGINEERING & FILTERING PIPELINE")
     print("="*70)
-    
+
     try:
         run_feature_engineering(file_type='train')
         run_feature_engineering(file_type='test')
-        
+
         print("\n" + "*"*70)
         print(" ✅ HOÀN THÀNH FEATURE ENGINEERING!")
         print(" 📁 Các file đã tạo:")
         print("    - prepared_train_1min.csv, prepared_train_5min.csv, prepared_train_15min.csv")
         print("    - prepared_test_1min.csv, prepared_test_5min.csv, prepared_test_15min.csv")
         print("*"*70 + "\n")
-        
+
     except Exception as e:
         logger.error(f"❌ LỖI HỆ THỐNG: {e}")
         import traceback

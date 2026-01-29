@@ -270,7 +270,8 @@ def run_full_pipeline(file_type='train'):
         agg_df = processor.aggregate_data(clean_df, window=interval)
         
         
-        agg_df = agg_df[agg_df['y'] > 0].copy()
+  
+        agg_df = agg_df.copy()
         
         # Xuất dữ liệu RAW (chưa lọc/engineer) ra file CSV phục vụ quá trình EDA
         output_name = f"processed_{file_type}_{interval}.csv"
