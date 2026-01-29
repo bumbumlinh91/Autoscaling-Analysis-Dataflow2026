@@ -26,8 +26,10 @@ def load_config():
         return yaml.safe_load(f)
 # Lấy thông tin downtime từ config
 CONFIG = load_config()
-DOWNTIME_START = pd.Timestamp(CONFIG['processing']['downtime']['start'])
-DOWNTIME_END = pd.Timestamp(CONFIG['processing']['downtime']['end'])
+downtime_cfg = CONFIG.get('processing', {}).get('downtime', {})
+DOWNTIME_START = pd.Timestamp(downtime_cfg.get('start'))
+DOWNTIME_END = pd.Timestamp(downtime_cfg.get('end'))
+logger.info(f"📅 Cấu hình Downtime: {DOWNTIME_START} -> {DOWNTIME_END}")
 
 
 # ============================================================
@@ -262,18 +264,32 @@ def run_full_pipeline(file_type='train'):
     
     for interval in intervals:
         logger.info(f"--- Đang vận hành Pipeline cho khung thời gian: {interval} ---")
+        
+        # Tạo dữ liệu gộp 
         agg_df = processor.aggregate_data(clean_df, window=interval)
         
-        # --- QUY TRÌNH LỌC NHIỄU DỮ LIỆU (DATA DENOISING) ---
-        # Tự động loại bỏ các mẫu dữ liệu không đạt tiêu chuẩn (Nghi vấn Bot/DDoS)
+        # Phân loại và lọc Downtime
+        if DOWNTIME_START and DOWNTIME_END:
+            # Tạo mask: True là giữ lại, False là xóa
+            mask_valid = ~((agg_df['ds'] >= DOWNTIME_START) & (agg_df['ds'] <= DOWNTIME_END))
+            
+            dropped_rows = len(agg_df) - mask_valid.sum()
+            
+            if dropped_rows > 0:
+                agg_df = agg_df[mask_valid] # Cập nhật trực tiếp vào agg_df
+                logger.warning(f"⚔️ [DOWNTIME] Đã xóa bay {dropped_rows} dòng rác trong khung {interval}.")
+            else:
+                logger.info("ℹ️ Không có dòng nào trong vùng Downtime để xóa.")
+
+        # Tạo bộ lọc Bot dựa trên ngưỡng lỗi
         threshold = CONFIG.get('analysis', {}).get('bot_error_threshold', 0.8)
         clean_agg_df = agg_df[agg_df['error_rate'] < threshold].copy()
         
-        # Xuất dữ liệu đã làm sạch ra file CSV phục vụ huấn luyện mô hình
+        # Xuất file CSV
         output_name = f"processed_{file_type}_{interval}.csv"
         clean_agg_df.to_csv(DATA_DIR / output_name, index=False)
         
-        logger.info(f"Hoàn tất xuất tập dữ liệu sạch: {output_name} (Đã lọc {len(agg_df) - len(clean_agg_df)} mẫu nhiễu)")
+        logger.info(f"✅ Đã xuất file: {output_name} (Đã lọc Downtime & Bot)")
         processed_package[interval] = clean_agg_df
         
     return processed_package
