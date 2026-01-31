@@ -1,8 +1,8 @@
 """
-MODULE: MODEL DEFINITIONS (ENTERPRISE ARCHITECTURE)
+MODULE: MODEL DEFINITIONS 
 ---------------------------------------------------
 Mô tả:
-    Định nghĩa các lớp mô hình dự báo (Forecasting Models) theo chuẩn hướng đối tượng.
+    Định nghĩa các lớp mô hình dự báo theo chuẩn hướng đối tượng.
     Tất cả các mô hình kế thừa từ BaseForecaster để đảm bảo tính nhất quán trong Pipeline.
 
 Hỗ trợ:
@@ -10,7 +10,6 @@ Hỗ trợ:
     2. XGBoostForecaster: Mô hình cây quyết định tăng cường (Gradient Boosting).
     3. LSTMForecaster: Mạng nơ-ron hồi quy (Deep Learning - PyTorch).
 
-Tác giả: Senior Data Scientist
 """
 import abc
 import os
@@ -31,9 +30,9 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 logger = logging.getLogger(__name__)
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# ==============================================================================
-# BASE CLASS (LỚP TRỪU TƯỢNG)
-# ==============================================================================
+
+# BASE CLASS 
+
 class BaseForecaster(abc.ABC):
     """Lớp cơ sở cho tất cả các mô hình dự báo."""
     
@@ -41,7 +40,7 @@ class BaseForecaster(abc.ABC):
         self.name = name
         self.config = config
         self.model = None
-        self.features = None # Danh sách tên các đặc trưng
+        self.features = None
 
     @abc.abstractmethod
     def fit(self, X, y=None):
@@ -71,9 +70,9 @@ class BaseForecaster(abc.ABC):
         mae = mean_absolute_error(y_true, y_pred)
         return {'rmse': rmse, 'mae': mae}
 
-# ==============================================================================
+
 # 1. PROPHET FORECASTER
-# ==============================================================================
+
 class ProphetForecaster(BaseForecaster):
     def __init__(self, config):
         super().__init__("Prophet", config)
@@ -96,7 +95,7 @@ class ProphetForecaster(BaseForecaster):
             interval_width=self.params.get('interval_width', 0.95)
         )
         
-        # Thêm Regressors (Cực kỳ quan trọng để Prophet thông minh hơn)
+        # Thêm Regressors 
         if regressors:
             self.regressors = regressors
             for reg in self.regressors:
@@ -111,9 +110,8 @@ class ProphetForecaster(BaseForecaster):
         forecast = self.model.predict(df_future)
         return forecast['yhat'].values
 
-# ==============================================================================
 # 2. XGBOOST FORECASTER
-# ==============================================================================
+
 class XGBoostForecaster(BaseForecaster):
     def __init__(self, config):
         super().__init__("XGBoost", config)
@@ -131,7 +129,7 @@ class XGBoostForecaster(BaseForecaster):
             objective=self.params.get('objective', 'reg:squarederror'),
             random_state=self.params.get('random_state', 42),
             n_jobs=-1,
-            early_stopping_rounds=50 # Tự động dừng nếu không cải thiện
+            early_stopping_rounds=50 
         )
         
         eval_set = [(X_train, y_train)]
@@ -153,9 +151,9 @@ class XGBoostForecaster(BaseForecaster):
     def get_feature_importance(self):
         return self.model.feature_importances_
 
-# ==============================================================================
-# 3. LSTM FORECASTER (PyTorch)
-# ==============================================================================
+
+# 3. LSTM FORECASTER 
+
 # Định nghĩa kiến trúc mạng
 class LSTMModule(nn.Module):
     def __init__(self, input_dim, hidden_dim, num_layers, dropout):
@@ -176,7 +174,7 @@ class LSTMModule(nn.Module):
     def forward(self, x):
         # x: (Batch, Seq, Feature)
         out, _ = self.lstm(x)
-        last_step = out[:, -1, :] # Lấy bước thời gian cuối cùng
+        last_step = out[:, -1, :] 
         return self.fc(last_step)
 
 class LSTMForecaster(BaseForecaster):
@@ -261,13 +259,13 @@ class LSTMForecaster(BaseForecaster):
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 counter = 0
-                # Lưu best state (In-memory saving)
+                # Lưu best state 
                 best_state = self.model.state_dict()
             else:
                 counter += 1
                 if self.params['early_stopping']['enabled'] and counter >= patience:
                     logger.info(f"   🛑 Early stopping at epoch {epoch+1}")
-                    self.model.load_state_dict(best_state) # Revert về best
+                    self.model.load_state_dict(best_state) 
                     break
         
         # Đảm bảo model giữ trọng số tốt nhất
@@ -281,7 +279,7 @@ class LSTMForecaster(BaseForecaster):
         self.model.eval()
         seq_length = self.config['models']['lstm'].get('n_lags', 30)
         
-        # Tạo sequence cho tập test (lưu ý sẽ mất seq_length điểm dữ liệu đầu)
+        # Tạo sequence cho tập test
         X_seq = []
         for i in range(len(X) - seq_length):
             X_seq.append(X[i:(i+seq_length)])

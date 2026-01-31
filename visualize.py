@@ -1,10 +1,10 @@
 """
-MODULE: FINAL VISUALIZATION (VẼ BIỂU ĐỒ BÁO CÁO)
+MODULE: VISUALIZATION 
 ------------------------------------------------
 Mô tả:
 1. Đọc file results/predictions_{interval}.csv
 2. Vẽ so sánh Actual vs (Prophet, XGBoost, LSTM).
-3. Xuất ra 2 ảnh/interval: Full và Zoom (cận cảnh).
+3. Xuất ra 2 bản Zoom và Full.
 """
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ import matplotlib.dates as mdates
 import seaborn as sns
 from pathlib import Path
 
-# Cấu hình giao diện biểu đồ đẹp
+# Cấu hình giao diện biểu đồ 
 sns.set_theme(style="whitegrid")
 plt.rcParams['figure.figsize'] = (14, 6)
 plt.rcParams['font.size'] = 11

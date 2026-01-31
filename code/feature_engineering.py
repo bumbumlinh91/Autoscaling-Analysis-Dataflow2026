@@ -1,21 +1,17 @@
 """
-MODULE: KỸ THUẬT ĐẶC TRƯNG & CHUẨN BỊ DỮ LIỆU (FEATURE ENGINEERING)
+MODULE: Feature Engineering Pipeline
 -------------------------------------------------------------------
 Mô tả:
-    Chuyển đổi dữ liệu chuỗi thời gian thô (Raw Time-series) thành 
-    Ma trận Đặc trưng (Feature Matrix) phục vụ huấn luyện mô hình học máy.
-    
-    Hỗ trợ đa khung thời gian (Multi-resolution): 1min, 5min, 15min.
+    Chuyển đổi dữ liệu chuỗi thời gian thô thành 
+    Feature Matrix để phục vụ huấn luyện mô hình học máy.
 
-Các kỹ thuật nâng cao áp dụng:
-    1. Time Continuity Restoration: Tái tạo trục thời gian liên tục để xử lý các khoảng trống (Gaps) 
-       do quá trình lọc nhiễu (Downtime Removal) gây ra.
+Các kỹ thuật áp dụng:
+    1. Time Continuity Restoration: Tái tạo trục thời gian liên tục để xử lý các khoảng trống 
+       do quá trình lọc nhiễu gây ra.
     2. Cyclical Encoding: Mã hóa lượng giác (Sin/Cos) cho đặc trưng thời gian (Giờ, Thứ).
-    3. Rolling Statistics: Tính toán xu hướng trượt (Moving Average/Std) để bắt tín hiệu Trend/Volatility.
-    4. Dynamic Lagging: Tự động tính toán bước trễ (Lag steps) dựa trên tần suất dữ liệu (Interval).
+    3. Rolling Statistics: Tính toán xu hướng trượt để bắt tín hiệu Trend/Volatility.
+    4. Dynamic Lagging: Tự động tính toán bước trễ dựa trên tần suất dữ liệu .
 
-Tác giả: Senior Data Scientist
-Phiên bản: 4.0 (Production Grade)
 """
 
 import yaml
@@ -27,12 +23,11 @@ import re
 import warnings
 import sys
 
-# Tắt cảnh báo FutureWarnings không cần thiết để giữ log sạch
+# Tắt cảnh báo FutureWarnings
 warnings.filterwarnings('ignore')
 
-# ===========================================================
 # CẤU HÌNH LOGGING & CONFIG
-# ===========================================================
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
@@ -60,9 +55,7 @@ def load_config():
 
 CONFIG = load_config()
 
-# ===========================================================
 # CLASS XỬ LÝ TRUNG TÂM
-# ===========================================================
 class FeatureEngineeringPipeline:
     def __init__(self, config):
         self.config = config
@@ -70,20 +63,20 @@ class FeatureEngineeringPipeline:
     def _parse_interval_minutes(self, interval_str):
         """
         Phân tích chuỗi định dạng '5min', '15min' sang số nguyên phút.
-        Hỗ trợ tính toán số bước nhảy (Steps) cho Lag Features.
+        Hỗ trợ tính toán số bước nhảy cho Lag Features.
         """
         match = re.match(r"(\d+)", interval_str)
         return int(match.group(1)) if match else 5
 
     def _restore_time_continuity(self, df, interval_str):
         """
-        [QUAN TRỌNG] Khôi phục tính liên tục của thời gian (Time Index Reconstruction).
+        Khôi phục tính liên tục của thời gian (Time Index Reconstruction).
         
-        Vấn đề: Dữ liệu sau EDA bị cắt bỏ một khoảng (Downtime/Noise). Nếu dùng shift() trực tiếp,
+        Vấn đề: Dữ liệu sau EDA bị cắt bỏ một khoảng bão/lỗi. Nếu dùng shift() trực tiếp,
         Model sẽ học sai quy luật (nhìn nhầm dữ liệu của 5 ngày trước thành dữ liệu vừa xảy ra).
         
         Giải pháp: 
-        1. Tạo một trục thời gian chuẩn đầy đủ (Full Datetime Index).
+        1. Tạo một trục thời gian chuẩn đầy đủ .
         2. Reindex DataFrame vào trục này. Các khoảng trống sẽ được lấp đầy bằng NaN.
         3. Khi tính toán Lag, shift() sẽ gặp NaN -> Lag chính xác về mặt vật lý.
         """
@@ -92,7 +85,7 @@ class FeatureEngineeringPipeline:
 
         df = df.set_index('ds').sort_index()
         
-        # Xác định tần suất (Frequency) chuẩn
+        # Xác định tần suất chuẩn
         minutes = self._parse_interval_minutes(interval_str)
         freq = f"{minutes}T" # Ví dụ: '1T', '5T', '15T'
         
@@ -109,7 +102,7 @@ class FeatureEngineeringPipeline:
 
     def generate_cyclical_features(self, df):
         """
-        Mã hóa đặc trưng chu kỳ (Cyclical Encoding) cho thời gian.
+        Mã hóa đặc trưng chu kỳ cho thời gian.
         
         Lý do: Máy học không hiểu tính tuần hoàn của giờ giấc (23h và 0h rất xa nhau về số học).
         Phép biến đổi Sin/Cos đưa chúng về gần nhau trên không gian vector.
@@ -130,19 +123,19 @@ class FeatureEngineeringPipeline:
         df['day_sin'] = np.sin(2 * np.pi * df['day_of_week'] / 7)
         df['day_cos'] = np.cos(2 * np.pi * df['day_of_week'] / 7)
         
-        # 3. Đặc trưng Cuối tuần (Boolean) - Rất mạnh cho dữ liệu NASA
+        # 3. Đặc trưng Cuối tuần (Boolean) 
         df['is_weekend'] = df['day_of_week'].apply(lambda x: 1 if x >= 5 else 0)
         
-        # Loại bỏ các cột thô để giảm nhiễu (Tuỳ chọn, ở đây giữ lại để debug nếu cần)
+        # Loại bỏ các cột thô để giảm nhiễu 
         # df.drop(columns=['hour', 'day_of_week'], inplace=True)
         
         return df
 
     def generate_lag_rolling_features(self, df, interval_str):
         """
-        Tạo đặc trưng chuỗi thời gian (Time-series Features) ĐỘNG theo khung thời gian.
+        Tạo đặc trưng chuỗi thời gian động theo khung thời gian.
         
-        Tự động tính toán số bước (steps) dựa trên interval:
+        Tự động tính toán số bước dựa trên interval:
         - 1min: 1h = 60 steps
         - 5min: 1h = 12 steps
         - 15min: 1h = 4 steps
@@ -150,43 +143,42 @@ class FeatureEngineeringPipeline:
         df = df.copy()
         target_col = 'intensity'
         
-        # Tính toán số bước nhảy (Steps calculation)
+        # Tính toán số bước nhảy 
         minutes = self._parse_interval_minutes(interval_str)
         steps_per_hour = 60 // minutes
         steps_per_day = 24 * steps_per_hour
         steps_per_week = 7 * steps_per_day
         
-        logger.info(f"   📐 Cấu hình Feature cho {interval_str}: 1h={steps_per_hour} steps, 24h={steps_per_day} steps.")
+        logger.info(f"    Cấu hình Feature cho {interval_str}: 1h={steps_per_hour} steps, 24h={steps_per_day} steps.")
         
-        # A. LAG FEATURES (Giá trị quá khứ - Autoregression)
+        # A. LAG FEATURES 
         # -----------------------------------------------------------
         lags = {
-            'lag_1step': 1,                 # Ngay trước đó (Short-term context)
-            'lag_1h': steps_per_hour,       # 1 giờ trước (Medium-term context)
-            'lag_24h': steps_per_day,       # Cùng giờ ngày hôm qua (Daily Seasonality)
-            'lag_7d': steps_per_week        # Cùng giờ tuần trước (Weekly Seasonality)
+            'lag_1step': 1,                 # Ngay trước đó
+            'lag_1h': steps_per_hour,       # 1 giờ trước 
+            'lag_24h': steps_per_day,       # Cùng giờ ngày hôm qua 
+            'lag_7d': steps_per_week        # Cùng giờ tuần trước
         }
         
         for name, step in lags.items():
             df[name] = df[target_col].shift(step)
             
-        # B. ROLLING FEATURES (Thống kê trượt - Trend & Volatility)
+        # B. ROLLING FEATURES 
         # -----------------------------------------------------------
         # Cửa sổ quan sát: 4 giờ gần nhất
         window_size = steps_per_hour * 4 
         
-        # Lưu ý QUAN TRỌNG: Phải Shift(1) trước khi Rolling để tránh Data Leakage (Nhìn thấy tương lai)
+        # Lưu ý QUAN TRỌNG: Phải Shift(1) trước khi Rolling để tránh Data Leakage 
         shifted = df[target_col].shift(1)
         
         df['roll_mean_4h'] = shifted.rolling(window=window_size).mean() # Xu hướng trung bình
-        df['roll_std_4h'] = shifted.rolling(window=window_size).std()   # Độ biến động (Volatility)
+        df['roll_std_4h'] = shifted.rolling(window=window_size).std()   # Độ biến động 
         df['roll_max_4h'] = shifted.rolling(window=window_size).max()   # Đỉnh tải cục bộ
         
         return df
 
     def cleanup_and_validate(self, df, target_col='intensity'):
         """
-        Vệ sinh dữ liệu lần cuối (Post-processing Cleaning).
         Loại bỏ các dòng NaN sinh ra do Lag/Rolling hoặc do quá trình Reindex (Vùng Gap).
         """
         initial_len = len(df)
@@ -205,7 +197,7 @@ class FeatureEngineeringPipeline:
 
     def execute(self):
         """
-        Hàm điều phối chính (Orchestrator).
+        Hàm điều phối chính.
         Thực hiện quy trình cho toàn bộ các khung thời gian được yêu cầu.
         """
         base_dir = Path(__file__).resolve().parent.parent
@@ -214,7 +206,7 @@ class FeatureEngineeringPipeline:
         # Dictionary để lưu Context từ tập Train (dùng để nối vào đầu tập Test)
         train_context_cache = {}
         
-        # YÊU CẦU: Xử lý 3 khung thời gian
+        # Xử lý 3 khung thời gian
         target_intervals = ['1min', '5min', '15min']
 
         print("\n" + "="*70)
@@ -236,7 +228,7 @@ class FeatureEngineeringPipeline:
                 
                 if not input_path.exists():
                     logger.warning(f"   ⚠️ Bỏ qua {interval}: Không tìm thấy file nguồn {input_file}")
-                    # Nếu file 1min/15min chưa có (do bước trước chưa chạy), ta bỏ qua để không crash
+                    # Nếu file 1min/15min chưa có, bỏ qua luôn
                     continue
 
                 logger.info(f"▶ Bắt đầu xử lý: {interval}")
@@ -245,7 +237,7 @@ class FeatureEngineeringPipeline:
                 df = pd.read_csv(input_path)
                 df['ds'] = pd.to_datetime(df['ds'])
                 
-                # --- LOGIC MỚI: XỬ LÝ CONTEXT CHO TEST (TRÁNH MẤT DỮ LIỆU ĐẦU KỲ) ---
+                # --- LOGIC: XỬ LÝ CONTEXT CHO TEST (TRÁNH MẤT DỮ LIỆU ĐẦU KỲ) ---
                 original_test_start = None
                 
                 if dataset_type == 'test' and interval in train_context_cache:
@@ -253,7 +245,7 @@ class FeatureEngineeringPipeline:
                     # Lấy context từ train nối vào trước test
                     context_df = train_context_cache[interval]
                     df = pd.concat([context_df, df], axis=0, ignore_index=True)
-                    # Xóa trùng lặp nếu có (đề phòng gối đầu)
+                    # Xóa trùng lặp nếu có 
                     df = df.drop_duplicates(subset=['ds']).sort_values('ds')
 
                 # 2. Khôi phục tính liên tục (Chạy trên dữ liệu đã nối để lấp gap giữa train-test)
@@ -265,10 +257,10 @@ class FeatureEngineeringPipeline:
                     train_context_cache[interval] = df[df['ds'] > cutoff_time].copy()
                 # --------------------------------------------------------------------
 
-                # 3. Tạo đặc trưng thời gian (Time Encoding)
+                # 3. Tạo đặc trưng thời gian 
                 df = self.generate_cyclical_features(df)
                 
-                # 4. Tạo đặc trưng chuỗi động (Dynamic Lag/Rolling)
+                # 4. Tạo đặc trưng chuỗi động 
                 df = self.generate_lag_rolling_features(df, interval)
                 
                 # --- CẮT TRẢ VỀ ĐÚNG KÍCH THƯỚC TEST ---
@@ -282,9 +274,7 @@ class FeatureEngineeringPipeline:
                 df.to_csv(output_path, index=False)
                 logger.info(f"   ✅ Hoàn tất: {output_file} | Shape: {df.shape}")
 
-# ===========================================================
 # ENTRY POINT
-# ===========================================================
 if __name__ == "__main__":
     try:
         pipeline = FeatureEngineeringPipeline(CONFIG)

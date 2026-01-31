@@ -9,7 +9,6 @@ import pandas as pd
 import numpy as np
 
 # 1. CONFIGURATION 
-# ============================================================
 # Thiết lập Logging để theo dõi tiến độ
 logging.basicConfig(
     level=logging.INFO,
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Các hằng số quan trọng
 def load_config():
-    # Trỏ đến thư mục config và đọc file config.yaml
+    # Đường dẫn tương đối đến config.yaml
     base_dir = Path(__file__).resolve().parent.parent
     config_path = base_dir / "config" / "config.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
@@ -32,9 +31,7 @@ DOWNTIME_END = pd.Timestamp(downtime_cfg.get('end'))
 logger.info(f"📅 Cấu hình Downtime: {DOWNTIME_START} -> {DOWNTIME_END}")
 
 
-# ============================================================
-# MODULE PHỤ TRỢ: REPORTING (HOST & CONTENT)
-# ============================================================
+# Report cho host và content
 def export_top_hosts(df, output_dir):
     """Xuất báo cáo Top Host phục vụ quá trình EDA."""
     print("🕵️‍♂️ [REPORT] Đang trích xuất Top 20 Hosts...")
@@ -63,7 +60,7 @@ def export_content_report(df, output_dir):
 
     def extract_extension(req_str):
         try:
-            # Lấy chuỗi giữa "GET " và " HTTP" (hoặc format tương tự)
+            # Lấy chuỗi giữa "GET " và " HTTP" 
             parts = req_str.split()
             if len(parts) > 1:
                 url = parts[1]
@@ -76,7 +73,7 @@ def export_content_report(df, output_dir):
     try:
         if 'request' not in df.columns: return
 
-        # Tạo bản sao nhẹ để xử lý string
+        # Xử lý và đếm tần suất
         temp_series = df['request'].apply(extract_extension)
         content_stats = temp_series.value_counts().head(15).reset_index()
         content_stats.columns = ['file_type', 'count']
@@ -87,16 +84,15 @@ def export_content_report(df, output_dir):
     except Exception as e:
         print(f"⚠️ Lỗi xuất Content Report: {e}")
 
-# ============================================================
-# 2. CLASS: PARSER 
-# ============================================================
+# 2. CLASS: PARSER
+
 class LogParser:
     """
     Class chịu trách nhiệm đọc file thô và chuyển thành DataFrame.
     Sử dụng kỹ thuật đọc từng dòng để tránh tràn RAM.
     """
     
-    # Regex Pattern: "Compiled" sẵn để chạy nhanh hơn
+    # Regex Pattern: Compiled một lần để tối ưu hiệu suất
     # Bóc tách: Host, Timestamp, Request, Status, Bytes
     LOG_PATTERN = re.compile(
         r'(?P<host>\S+) \S+ \S+ '
@@ -147,9 +143,9 @@ class LogParser:
             logger.error(f"LỖI: Không tìm thấy file tại {file_path}")
             raise
 
-# ============================================================
+
 # 3. CLASS: PROCESSOR 
-# ============================================================
+
 class DataProcessor:
     """
     Class chịu trách nhiệm làm sạch, chuẩn hóa và gom nhóm (Aggregation).
@@ -159,7 +155,7 @@ class DataProcessor:
         """Chuẩn hóa kiểu dữ liệu."""
         logger.info("Đang chuẩn hóa dữ liệu và xử lý múi giờ...")
         
-        # 1. Chuyển đổi Timestamp có múi giờ
+        # Chuyển đổi Timestamp có múi giờ
         df['timestamp'] = pd.to_datetime(
             df['timestamp'], 
             format='%d/%b/%Y:%H:%M:%S %z', 
@@ -169,11 +165,11 @@ class DataProcessor:
         # Bỏ thông tin múi giờ để so sánh dễ dàng
         df['timestamp'] = df['timestamp'].dt.tz_localize(None)
        
-        # 2. Ép kiểu số
+        # Ép kiểu số
         df['status'] = df['status'].astype(int)
         df['bytes'] = df['bytes'].astype(float) 
         
-        # 3. Sắp xếp theo thời gian 
+        # Sắp xếp theo thời gian 
         df = df.sort_values('timestamp').reset_index(drop=True)
         
         return df
@@ -194,7 +190,7 @@ class DataProcessor:
         # - error_4xx: Phát hiện truy cập rác hoặc link hỏng 
         # - error_5xx: Theo dõi tình trạng quá tải của máy chủ 
         agg_df = df_indexed.resample(window).agg({
-            'request': 'count',                 # Tổng lượt truy cập (Hits)
+            'request': 'count',                 # Tổng lượt truy cập 
             'bytes': ['sum', 'mean'],           # Tổng và trung bình băng thông
             'status': [
                 ('error_4xx', lambda x: ((x >= 400) & (x < 500)).sum()), # Lỗi do khách hàng/Bot
@@ -215,40 +211,40 @@ class DataProcessor:
         # Reset chỉ mục và chuẩn hóa tên cột thời gian sang 'ds'
         agg_df = agg_df.reset_index().rename(columns={'timestamp': 'ds'})
         
-       # --- TÍNH TOÁN CÁC BIẾN ĐẶC TRƯNG NÂNG CAO (FEATURE ENGINEERING) ---
-        # 1. Tỉ lệ lỗi (Error Rate): Phản ánh độ ổn định và sức khỏe của hệ thống
+       # --- Các biến nâng cao ---
+        # 1. Tỉ lệ lỗi: Phản ánh độ ổn định và sức khỏe của hệ thống
         agg_df['error_rate'] = (agg_df['error_4xx'] + agg_df['error_5xx']) / (agg_df['y'] + 1e-8)
         
-        # 2. Cường độ tải (Resource Intensity): Chỉ số tải thực tế dựa trên lưu lượng và băng thông
+        # 2. Cường độ tải: Chỉ số tải thực tế dựa trên lưu lượng và băng thông
         # Sử dụng trọng số từ cấu hình để phản ánh áp lực lên tài nguyên phần cứng
         weight = CONFIG.get('analysis', {}).get('resource_weight', 1.0)
         agg_df['intensity'] = agg_df['y'] * agg_df['avg_bytes'] * weight
 
-        # 3. Phân loại trạng thái hệ thống (Downtime Labeling)
+        # 3. Phân loại trạng thái hệ thống
         # Gắn nhãn các giai đoạn xảy ra sự cố dựa trên khung thời gian cấu hình
         agg_df['is_downtime'] = ((agg_df['ds'] >= DOWNTIME_START) & (agg_df['ds'] <= DOWNTIME_END)).astype(int)
         
         # Xử lý các giá trị thiếu bằng phương pháp điền số 0 để đảm bảo tính liên tục của dữ liệu
         return agg_df.fillna(0)
 
-# ============================================================
+
 # 4. MAIN EXECUTION
-# ============================================================
+
 def run_full_pipeline(file_type='train'):
     """
     Hàm Wrapper chạy một lần, xuất ra cả 3 khung thời gian: 1m, 5m, 15m.
     """
-    # 1. Thiết lập đường dẫn tương đối 
+    # Thiết lập đường dẫn tương đối 
     BASE_DIR = Path(__file__).resolve().parent.parent 
     DATA_DIR = BASE_DIR / "data"
     filename = CONFIG['paths']['train_file'] if file_type == 'train' else CONFIG['paths']['test_file']
     file_path = (BASE_DIR / CONFIG['paths']['input_dir']) / filename
     
-    # 2. Khởi tạo
+    # Khởi tạo
     parser = LogParser()
     processor = DataProcessor()
     
-    # 3. Chạy Pipeline (Chỉ load và clean 1 lần duy nhất để tiết kiệm RAM)
+    # Chạy Pipeline (Chỉ load và clean 1 lần duy nhất để tiết kiệm RAM)
     raw_df = parser.load_data(file_path)
     clean_df = processor.clean_dataframe(raw_df)
 
@@ -258,7 +254,7 @@ def run_full_pipeline(file_type='train'):
         export_top_hosts(clean_df, DATA_DIR)
         export_content_report(clean_df, DATA_DIR)
 
-    # 4. Aggregate cho cả 3 khung thời gian
+    # Aggregate cho cả 3 khung thời gian
     intervals = CONFIG['processing']['intervals']
     processed_package = {}
     
@@ -285,7 +281,7 @@ def run_full_pipeline(file_type='train'):
         threshold = CONFIG.get('analysis', {}).get('bot_error_threshold', 0.8)
         clean_agg_df = agg_df[agg_df['error_rate'] < threshold].copy()
         
-        # Xuất file CSV
+        # Xuất CSV
         output_name = f"processed_{file_type}_{interval}.csv"
         clean_agg_df.to_csv(DATA_DIR / output_name, index=False)
         
@@ -299,7 +295,7 @@ if __name__ == "__main__":
     print(" HỆ THỐNG XỬ LÝ DỮ LIỆU AUTOSCALING ")
     print("="*50)
     
-    # Danh sách các tập dữ liệu cần xử lý
+    # Tệp dữ liệu cần xử lý
     data_types = ['train', 'test']
     
     try:
@@ -315,5 +311,5 @@ if __name__ == "__main__":
         print("*"*50)
         
     except Exception as e:
-        # Nếu lỗi ở tập nào, hệ thống sẽ báo chính xác lỗi đó
+        # Báo lỗi 
         logger.error(f"LỖI HỆ THỐNG TRONG QUÁ TRÌNH XỬ LÝ: {e}")

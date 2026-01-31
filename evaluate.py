@@ -1,11 +1,5 @@
 """
-MODULE: FINAL FIXER (NO LOG VERSION - MATCHING YOUR TRAIN.PY)
--------------------------------------------------------------
-Mô tả:
-1. Tuân thủ tuyệt đối logic của train.py: KHÔNG DÙNG LOG TRANSFORM.
-2. Quy trình: Load Model -> Predict -> Inverse Scaler -> Kết quả.
-3. Tính toán MAPE chuẩn (lọc bỏ số 0).
-4. Xuất file CSV để vẽ biểu đồ.
+MODULE: EVALUATION PIPELINE + TRAIN PROPHET LẠI
 """
 import pandas as pd
 import numpy as np
@@ -46,10 +40,10 @@ class FinalFixerNoLog:
         ]
 
     def calculate_metrics(self, y_true, y_pred, interval):
-        # 1. Chặn số âm (Intensity không thể âm)
+        # 1. Chặn số âm 
         y_pred = np.maximum(y_pred, 0)
         
-        # 2. Cắt độ dài cho khớp
+        # 2. Cắt độ dài
         min_len = min(len(y_true), len(y_pred))
         y_true = y_true[-min_len:]
         y_pred = y_pred[-min_len:]
@@ -82,7 +76,7 @@ class FinalFixerNoLog:
         return rmse, mse, mae, mape
 
     def retrain_prophet(self, df_train, interval):
-        # Train lại Prophet cho chắc ăn (vì file cũ hay lỗi)
+        # Train lại Prophet với toàn bộ dữ liệu train
         print(f"   🛠️ Đang train lại Prophet cho {interval}...")
         pf_train = pd.DataFrame({
             'ds': pd.to_datetime(df_train['ds']),
@@ -149,7 +143,7 @@ class FinalFixerNoLog:
                     feat_cols = [c for c in self.feature_cols if c in df_test.columns]
                     X_scaled = scaler_X.transform(df_test[feat_cols].values)
                     
-                    # Predict -> Inverse Scaler -> XONG (Không EXPM1)
+                    # Predict -> Inverse Scaler
                     pred_xgb = scaler_y.inverse_transform(model_xgb.predict(X_scaled).reshape(-1, 1)).flatten()
                     
                     rmse, mse, mae, mape = self.calculate_metrics(y_true, pred_xgb, interval)
@@ -182,7 +176,7 @@ class FinalFixerNoLog:
                         with torch.no_grad():
                             p = forecaster.model(inp).cpu().numpy().flatten()
                         
-                        # Inverse Scaler -> XONG (Không EXPM1)
+                        # Inverse Scaler 
                         pred_lstm = scaler_y.inverse_transform(p.reshape(-1, 1)).flatten()
                         
                         y_trim = y_true[n_lags:]

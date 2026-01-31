@@ -1,9 +1,9 @@
 """
-MODULE: TRAINING PIPELINE (PRODUCTION READY)
+MODULE: TRAINING PIPELINE
 --------------------------------------------
 Mô tả:
     Kịch bản huấn luyện toàn diện cho hệ thống Autoscaling.
-    Tự động quét cấu hình, load dữ liệu đã chuẩn bị (prepared),
+    Tự động quét cấu hình, load dữ liệu đã chuẩn bị,
     huấn luyện song song các mô hình (Prophet, XGBoost, LSTM)
     và xuất báo cáo hiệu năng chi tiết.
 
@@ -12,10 +12,6 @@ Quy trình:
     2. Data Loading: Đọc file prepared_{mode}_{interval}.csv.
     3. Feature Selection: Tự động lọc cột feature và target.
     4. Training Dispatcher: Gọi đúng class model tương ứng.
-    5. Evaluation: Tính RMSE, MAE.
-    6. Reporting: Lưu kết quả và model artifacts.
-
-Tác giả: Senior Data Scientist
 """
 import os
 import sys
@@ -32,9 +28,9 @@ from datetime import datetime
 # Import Models từ file models.py vừa tạo
 from models import ProphetForecaster, XGBoostForecaster, LSTMForecaster
 
-# ==============================================================================
+
 # SETUP & CONFIG
-# ==============================================================================
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | %(levelname)s | %(message)s',
@@ -52,9 +48,9 @@ def load_config():
 
 CONFIG = load_config()
 
-# ==============================================================================
+
 # TRAINER CLASS (MANAGER)
-# ==============================================================================
+
 class DataflowTrainer:
     def __init__(self):
         self.config = CONFIG
@@ -65,7 +61,7 @@ class DataflowTrainer:
         self.models_dir.mkdir(exist_ok=True)
         self.results_dir.mkdir(exist_ok=True)
         
-        # Danh sách Features (Phải khớp với feature_engineering.py)
+        # Danh sách Features 
         self.feature_cols = [
             'hour_sin', 'hour_cos', 'day_sin', 'day_cos', 'is_weekend',
             'lag_1step', 'lag_1h', 'lag_24h', 'lag_7d',
@@ -106,7 +102,7 @@ class DataflowTrainer:
         
         # 1. Load Data
         df_train = self.load_prepared_data(interval, 'train')
-        df_test = self.load_prepared_data(interval, 'test') # Dùng làm Validation
+        df_test = self.load_prepared_data(interval, 'test') 
         
         if df_train is None or df_test is None:
             return
@@ -117,7 +113,7 @@ class DataflowTrainer:
         X_test = df_test[self.feature_cols].values
         y_test = df_test[self.target_col].values
 
-        # 3. Scaling (Quan trọng cho LSTM/XGBoost)
+        # 3. Scaling
         scaler_X = StandardScaler()
         scaler_y = StandardScaler()
         
@@ -130,21 +126,20 @@ class DataflowTrainer:
         joblib.dump(scaler_X, self.models_dir / f"scaler_X_{interval}.pkl")
         joblib.dump(scaler_y, self.models_dir / f"scaler_y_{interval}.pkl")
 
-        # ==================================================
+        
         # MODEL 1: PROPHET
-        # ==================================================
+        
         if self.config['models']['prophet']['enabled']:
             model = ProphetForecaster(self.config)
             
-            # [FIX QUAN TRỌNG] Xử lý trùng lặp cột 'y'
             # Tạo bản sao để không ảnh hưởng dữ liệu gốc
             pf_train = df_train.copy()
             
-            # Nếu trong file csv đã có sẵn cột 'y' (rác từ bước trước), phải xóa nó đi!
+            # Nếu trong file csv đã có sẵn cột 'y', xóa đi để tránh lỗi
             if 'y' in pf_train.columns:
                 pf_train = pf_train.drop(columns=['y'])
             
-            # Giờ mới được rename 'intensity' -> 'y'
+            # Rename cột cho đúng định dạng Prophet
             pf_train = pf_train.rename(columns={'ds': 'ds', self.target_col: 'y'})
             
             # Reset index để đảm bảo an toàn tuyệt đối
@@ -156,12 +151,12 @@ class DataflowTrainer:
             model.fit(pf_train, regressors=pf_regressors)
             model.save(self.models_dir / f"prophet_{interval}.pkl")
 
-        # ==================================================
+       
         # MODEL 2: XGBOOST
-        # ==================================================
+        
         if self.config['models']['xgboost']['enabled']:
             model = XGBoostForecaster(self.config)
-            # XGBoost dùng dữ liệu đã Scaling hoặc Raw đều được (Scaling tốt hơn chút)
+            # XGBoost dùng dữ liệu đã Scaling hoặc Raw đều được
             model.fit(X_train_sc, y_train_sc, X_test_sc, y_test_sc)
             
             # Eval sơ bộ
@@ -171,16 +166,16 @@ class DataflowTrainer:
             
             model.save(self.models_dir / f"xgboost_{interval}.pkl")
 
-        # ==================================================
+        
         # MODEL 3: LSTM
-        # ==================================================
+       
         if self.config['models']['lstm']['enabled']:
             input_dim = X_train_sc.shape[1]
             model = LSTMForecaster(self.config, input_dim)      
 
             model.fit(X_train_sc, y_train_sc, X_test_sc, y_test_sc)
             
-            # Lưu model Pytorch (chỉ lưu state_dict cho nhẹ)
+            # Lưu model Pytorch 
             torch.save(model.model.state_dict(), self.models_dir / f"lstm_{interval}.pth")
             logger.info(f"✅ LSTM Model saved to lstm_{interval}.pth")
 
@@ -195,9 +190,8 @@ class DataflowTrainer:
                 import traceback
                 traceback.print_exc()
 
-# ==============================================================================
 # MAIN ENTRY
-# ==============================================================================
+
 if __name__ == "__main__":
     trainer = DataflowTrainer()
     trainer.run_complete_training()
