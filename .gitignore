@@ -18,5 +18,9 @@ venv/
 Thumbs.db
 
 # === MODELS ===
-models/*.pkl
-models/*.joblib
+saved_models/*.joblib
+# === RESULTS ===
+results/charts/*.png
+results/charts/*.jpg
+results/*.txt
+results/*.csv
