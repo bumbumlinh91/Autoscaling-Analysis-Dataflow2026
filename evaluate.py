@@ -1,5 +1,5 @@
 """
-MODULE: EVALUATION PIPELINE + TRAIN PROPHET LẠI
+MODULE: EVALUATION PIPELINE
 """
 import pandas as pd
 import numpy as np
@@ -9,7 +9,7 @@ import yaml
 import logging
 from pathlib import Path
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from prophet import Prophet
+from models import ProphetForecaster, XGBoostForecaster, LSTMForecaster # Import class wrapper
 
 # Setup
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -75,29 +75,6 @@ class FinalFixerNoLog:
             
         return rmse, mse, mae, mape
 
-    def retrain_prophet(self, df_train, interval):
-        # Train lại Prophet với toàn bộ dữ liệu train
-        print(f"   🛠️ Đang train lại Prophet cho {interval}...")
-        pf_train = pd.DataFrame({
-            'ds': pd.to_datetime(df_train['ds']),
-            'y': df_train[self.target_col]
-        })
-        active_regs = []
-        for col in self.feature_cols:
-            if col in df_train.columns:
-                pf_train[col] = df_train[col]
-                active_regs.append(col)
-        
-        if interval == '1min':
-            m = Prophet(growth='linear', daily_seasonality=True, weekly_seasonality=False)
-        else:
-            m = Prophet(growth='linear', daily_seasonality=True, weekly_seasonality=True)
-            
-        for reg in active_regs:
-            m.add_regressor(reg)
-        m.fit(pf_train)
-        return m, active_regs
-
     def run(self):
         leaderboard = []
         print(f"\n{'='*60}")
@@ -115,21 +92,25 @@ class FinalFixerNoLog:
             df_test = pd.read_csv(test_path)
             df_test['ds'] = pd.to_datetime(df_test['ds'])
             y_true = df_test[self.target_col].values 
+            df_test = df_test.reset_index(drop=True)
             
             df_preds = pd.DataFrame({'ds': df_test['ds'], 'Actual': y_true})
 
             # 1. PROPHET
             try:
-                model_p, regs_p = self.retrain_prophet(df_train, interval)
-                pf_fut = pd.DataFrame({'ds': df_test['ds']})
-                for r in regs_p: 
-                    if r in df_test.columns: pf_fut[r] = df_test[r]
-                pred_p = model_p.predict(pf_fut)['yhat'].values[-len(y_true):]
+                prophet_path = self.models_dir / f"prophet_{interval}.pkl"
+                if prophet_path.exists():
+                    # Load model đã train từ file .pkl
+                    model_p = joblib.load(prophet_path)
+                    
+                    # Dự báo (Hàm predict của ProphetForecaster đã xử lý việc gọi model.predict)
+                    # Lưu ý: df_test cần có đủ các cột regressor mà model đã học
+                    pred_p = model_p.predict(df_test)[-len(y_true):]
                 
-                rmse, mse, mae, mape = self.calculate_metrics(y_true, pred_p, interval)
-                leaderboard.append({'Interval': interval, 'Model': 'Prophet', 'RMSE': rmse, 'MSE': mse, 'MAE': mae, 'MAPE (%)': mape})
-                df_preds['Prophet'] = pred_p
-                print(f"   ✅ Prophet: MAPE={mape:.2f}%")
+                    rmse, mse, mae, mape = self.calculate_metrics(y_true, pred_p, interval)
+                    leaderboard.append({'Interval': interval, 'Model': 'Prophet', 'RMSE': rmse, 'MSE': mse, 'MAE': mae, 'MAPE (%)': mape})
+                    df_preds['Prophet'] = pred_p
+                    print(f"   ✅ Prophet: MAPE={mape:.2f}%")
             except Exception as e: print(f"   ❌ Prophet Error: {e}")
 
             # 2. XGBOOST
@@ -156,10 +137,9 @@ class FinalFixerNoLog:
             try:
                 lstm_path = self.models_dir / f"lstm_{interval}.pth"
                 if lstm_path.exists():
-                    from models import LSTMForecaster
                     input_dim = len([c for c in self.feature_cols if c in df_test.columns])
-                    conf = {'models': {'lstm': {'params': {'units': 64, 'num_layers': 2, 'dropout': 0.2}}}}
-                    forecaster = LSTMForecaster(conf, input_dim)
+                    # Sử dụng config gốc để đảm bảo tham số khớp với lúc train
+                    forecaster = LSTMForecaster(self.config, input_dim)
                     forecaster.model.load_state_dict(torch.load(lstm_path, map_location=DEVICE))
                     forecaster.model.eval()
                     
@@ -169,7 +149,7 @@ class FinalFixerNoLog:
                     feat_cols = [c for c in self.feature_cols if c in df_test.columns]
                     X_scaled = scaler_X.transform(df_test[feat_cols].values)
                     
-                    n_lags = 30
+                    n_lags = self.config['models']['lstm'].get('n_lags', 30)
                     if len(X_scaled) > n_lags:
                         X_seq = np.array([X_scaled[i:i+n_lags] for i in range(len(X_scaled)-n_lags)])
                         inp = torch.from_numpy(X_seq).float().to(DEVICE)

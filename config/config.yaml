@@ -28,7 +28,7 @@ models:
       daily_seasonality: true      # Log server có tính chu kỳ ngày mạnh
       weekly_seasonality: true     # Có tính chu kỳ tuần (Cuối tuần thấp)
       yearly_seasonality: false    # Dữ liệu < 1 năm nên tắt
-      seasonality_mode: "multiplicative" # Biên độ dao động tăng theo volume
+      seasonality_mode: "additive" # Biên độ dao động tăng theo volume
       changepoint_prior_scale: 0.05      # Độ nhạy với sự thay đổi xu hướng (0.001-0.5)
       interval_width: 0.95               # Khoảng tin cậy
 

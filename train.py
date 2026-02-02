@@ -80,6 +80,7 @@ class DataflowTrainer:
         
         df = pd.read_csv(path)
         if 'ds' in df.columns:
+            df['ds'] = pd.to_datetime(df['ds'])
             # Sắp xếp theo thời gian để chắc chắn
             df = df.sort_values('ds')
             

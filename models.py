@@ -88,6 +88,8 @@ class ProphetForecaster(BaseForecaster):
         
         # Khởi tạo model với tham số từ Config
         self.model = Prophet(
+            growth=self.params.get('growth', 'linear'),
+            seasonality_mode=self.params.get('seasonality_mode', 'additive'),
             daily_seasonality=self.params.get('daily_seasonality', True),
             weekly_seasonality=self.params.get('weekly_seasonality', True),
             yearly_seasonality=self.params.get('yearly_seasonality', False),

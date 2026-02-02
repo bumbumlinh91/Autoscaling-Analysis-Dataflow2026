@@ -134,11 +134,11 @@ class SimulationEngine:
         self.data_path = Path(data_path)
         
         # Tải cấu hình
-        print(f"⚙️ Loading configuration from: {config_path}")
+        print(f"⚙️ Đang tải cấu hình từ: {config_path}")
         self.specs = load_simulation_config(config_path)
-        print(f"   - Capacity: {self.specs['server_capacity']:,} reqs")
-        print(f"   - Buffer Ratio: {self.specs['buffer_ratio']*100}%")
-        print(f"   - Max Replicas: {self.specs['max_replicas']}")
+        print(f"   - Sức chịu tải: {self.specs['server_capacity']:,} reqs")
+        print(f"   - Buffer: {self.specs['buffer_ratio']*100}%")
+        print(f"   - Số lượng máy chủ tối đa: {self.specs['max_replicas']}")
 
         # Khởi tạo chiến lược và bộ phát hiện bất thường
         self.strategies: List[BaseScalingStrategy] = [
@@ -157,7 +157,7 @@ class SimulationEngine:
 
     def run(self):
         print(f"\n{'='*60}")
-        print("🚀 STARTING SIMULATION (CONFIG DRIVEN)")
+        print("ĐANG CHẠY MÔ PHỎNG TỰ ĐỘNG MỞ RỘNG ỨNG DỤNG")
         print(f"{'='*60}")
         
         df = self._load_data()
@@ -232,7 +232,7 @@ class SimulationEngine:
 
     def _generate_report(self):
         print(f"\n{'='*60}")
-        print("📊 FINANCIAL SUMMARY REPORT")
+        print("BÁO CÁO CHI PHÍ VÀ HIỆU QUẢ MÔ PHỎNG")
         print(f"{'='*60}")
         
         summary_data = []
@@ -242,21 +242,21 @@ class SimulationEngine:
             total_dropped = self.results[f'{prefix}_Dropped'].sum()
             
             summary_data.append({
-                'Strategy': strategy.name,
-                'Total Cost ($)': total_cost,
-                'Violated Requests': int(total_dropped)
+                'Chiến lược': strategy.name,
+                'Tổng chi phí ($)': total_cost,
+                'Requests bị bỏ qua': int(total_dropped)
             })
             
         summary_df = pd.DataFrame(summary_data)
         print(summary_df.to_string(index=False))
         
         # Tính ROI
-        base_cost = summary_df.loc[0, 'Total Cost ($)']
-        ai_cost = summary_df.loc[1, 'Total Cost ($)']
+        base_cost = summary_df.loc[0, 'Tổng chi phí ($)']
+        ai_cost = summary_df.loc[1, 'Tổng chi phí ($)']
         savings = base_cost - ai_cost
         savings_pct = (savings / base_cost) * 100
         
-        print(f"\n>>> ROI ANALYSIS: Predictive Scaling saves ${savings:,.2f} ({savings_pct:.2f}%)")
+        print(f"\n>>> Phân tích ROI: Chính sách scaling dự báo tiết kiệm ${savings:,.2f} ({savings_pct:.2f}%)")
         
         Path("results").mkdir(exist_ok=True)
         summary_df.to_csv("results/scaling_financial_report.csv", index=False)
