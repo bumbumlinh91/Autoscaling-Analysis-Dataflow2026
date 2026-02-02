@@ -13,22 +13,63 @@ paths:
 processing:
   # Các khung thời gian cần xuất ra file CSV
   intervals: ["1min", "5min", "15min"]
-  # Mốc thời gian xảy ra sự cố (Downtime) để gắn cờ 0/1
+  # Mốc thời gian Downtime tổng hợp (Bão + Sự cố phát hiện từ EDA)
   downtime:
-    start: "1995-08-01 14:52:01"
-    end: "1995-08-03 04:36:13"
+    start: "1995-07-28 13:25:00"
+    end: "1995-08-03 05:25:00"
 
-# 3. THAM SỐ MÔ HÌNH (ví dụ)
-model_params:
+# 3. THAM SỐ MÔ HÌNH 
+models:
+  # --- A. PROPHET (Facebook) ---
   prophet:
-    changepoint_prior_scale: 0.05
-    yearly_seasonality: false
-    weekly_seasonality: true
-    daily_seasonality: true
+    enabled: true            # Bật/Tắt huấn luyện model này
+    params:
+      growth: "linear"
+      daily_seasonality: true      # Log server có tính chu kỳ ngày mạnh
+      weekly_seasonality: true     # Có tính chu kỳ tuần (Cuối tuần thấp)
+      yearly_seasonality: false    # Dữ liệu < 1 năm nên tắt
+      seasonality_mode: "additive" # Biên độ dao động tăng theo volume
+      changepoint_prior_scale: 0.05      # Độ nhạy với sự thay đổi xu hướng (0.001-0.5)
+      interval_width: 0.95               # Khoảng tin cậy
+
+  # --- B. XGBOOST (Gradient Boosting) ---
   xgboost:
-    n_estimators: 100
-    max_depth: 5
-    learning_rate: 0.1
+    enabled: true
+    params:
+      n_estimators: 1000     # Số lượng cây tối đa
+      max_depth: 6           # Độ sâu cây (tránh Overfitting)
+      learning_rate: 0.01    # Tốc độ học (Thấp để hội tụ tốt hơn)
+      subsample: 0.8         # Lấy mẫu dòng (Stochastic bagging)
+      colsample_bytree: 0.8  # Lấy mẫu cột (Feature sampling)
+      objective: "reg:squarederror"
+      n_jobs: -1             # Dùng tất cả CPU Core
+      random_state: 42
+      # Early Stopping: Dừng nếu không cải thiện sau 50 vòng
+      early_stopping_rounds: 50 
+
+  # --- C. LSTM (Deep Learning - PyTorch) ---
+  lstm:
+    enabled: true
+    # Độ dài chuỗi quá khứ dùng để dự báo (Sequence Length)
+    # Lưu ý: Code sẽ tự điều chỉnh steps dựa trên interval (vd: 5min -> 30 steps ~ 2.5h)
+    n_lags: 30               
+    
+    params:
+      # Kiến trúc mạng
+      units: 64              # Số nơ-ron trong lớp ẩn (Hidden Size)
+      num_layers: 2          # Số lớp LSTM chồng nhau (Stacked LSTM)
+      dropout: 0.2           # Tắt ngẫu nhiên nơ-ron để chống học vẹt (Overfitting)
+      
+      # Huấn luyện
+      epochs: 50             # Số vòng lặp tối đa
+      batch_size: 64         # Kích thước lô dữ liệu
+      learning_rate: 0.001   # Tốc độ học (Adam optimizer)
+      
+      # Cơ chế dừng sớm (Early Stopping) - Rất quan trọng
+      early_stopping:
+        enabled: true
+        patience: 10         # Dừng nếu Val Loss không giảm sau 10 epoch liên tiếp
+        min_delta: 0.0001    # Ngưỡng cải thiện tối thiểu
 # 4. CẤU HÌNH PHÂN TÍCH NÂNG CAO 
 analysis:
   # Ngưỡng tỉ lệ lỗi tối đa cho phép (0.8 = 80%)
@@ -38,3 +79,22 @@ analysis:
   # Trọng số tài nguyên 
   # Dùng để tính toán chỉ số Intensity, phản ánh áp lực thực tế lên hạ tầng
   resource_weight: 1.2
+
+# 5. CẤU HÌNH AUTOSCALING 
+
+scaling_simulation:
+  # Cấu hình Server (Hạ tầng)
+  server_capacity: 500000   # Sức chịu tải (Requests/15 phút) 
+  server_cost: 0.50         # Giá thuê ($/15 phút/Replica)
+  
+  # Cấu hình SLA (Chất lượng dịch vụ)
+  sla_penalty: 0.01         # Phạt vi phạm cam kết ($/Request bị rớt)
+  
+  # Cấu hình Scaling (Giới hạn)
+  min_replicas: 1
+  max_replicas: 200         
+  
+  # Cấu hình Chiến lược 
+  buffer_ratio: 0.25        # Buffer 25% để đảm bảo an toàn
+  cooldown_period: 4        # Chu kỳ làm nguội (4 * 15p = 1 giờ)
+  anomaly_threshold: 3.0    # Ngưỡng phát hiện DDoS (Sigma)
