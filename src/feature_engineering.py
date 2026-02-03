@@ -22,7 +22,7 @@ class FeatureEngineeringPipeline:
         if 'ds' not in df.columns: raise ValueError("Thiếu cột 'ds'")
         df = df.set_index('ds').sort_index()
         minutes = self._parse_interval_minutes(interval_str)
-        full_idx = pd.date_range(start=df.index.min(), end=df.index.max(), freq=f"{minutes}T")
+        full_idx = pd.date_range(start=df.index.min(), end=df.index.max(), freq=f"{minutes}min")
         df_restored = df.reindex(full_idx)
         return df_restored.reset_index().rename(columns={'index': 'ds'})
 
