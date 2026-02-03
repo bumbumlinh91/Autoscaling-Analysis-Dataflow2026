@@ -187,7 +187,8 @@ with tabs[2]:
         # --- MÔ PHỎNG REACTIVE (BASELINE) ---
         # Reactive thuần túy: Scale theo nhu cầu thực tế (ở đây là forecast) / capacity
         # Thường Reactive sẽ scale dư ra một chút để an toàn (ví dụ +10%)
-        df["reactive_replicas"] = np.ceil(df["yhat"] / server_capacity).astype(int)
+        lagged_load = df["y"].shift(1).fillna(df["yhat"])
+        df["reactive_replicas"] = np.ceil((lagged_load / server_capacity) * 1.2).astype(int)
         df["reactive_replicas"] = df["reactive_replicas"].clip(lower=1) # [FIX] Tối thiểu 1 server
         
         # --- TÍNH TOÁN CHI PHÍ & SLA PENALTY ---
