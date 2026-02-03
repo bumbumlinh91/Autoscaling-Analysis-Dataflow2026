@@ -1,7 +1,6 @@
 # === DỮ LIỆU 
-data/
-*.txt
-*.csv
+data/*.txt
+data/*.csv
 
 # === PYTHON & MÔI TRƯỜNG ===
 __pycache__/
