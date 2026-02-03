@@ -54,7 +54,7 @@ class ReactiveStrategy(BaseScalingStrategy):
 
     def calculate_target_replicas(self, current_demand: float, predicted_demand: float) -> int:
         # Buffer 25% cố định
-        target = np.ceil((current_demand / self.capacity) * 1.2)
+        target = np.ceil((current_demand / self.capacity) * 1.25)
         return int(np.clip(target, self.min_rep, self.max_rep))
 
 
