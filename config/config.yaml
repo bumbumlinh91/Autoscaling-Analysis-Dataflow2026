@@ -65,7 +65,7 @@ models:
       batch_size: 64         # Kích thước lô dữ liệu
       learning_rate: 0.001   # Tốc độ học (Adam optimizer)
       
-      # Cơ chế dừng sớm (Early Stopping) - Rất quan trọng
+      # Cơ chế dừng sớm (Early Stopping) 
       early_stopping:
         enabled: true
         patience: 10         # Dừng nếu Val Loss không giảm sau 10 epoch liên tiếp
@@ -84,11 +84,11 @@ analysis:
 
 scaling_simulation:
   # Cấu hình Server (Hạ tầng)
-  server_capacity: 500000   # Sức chịu tải (Requests/15 phút) 
-  server_cost: 0.50         # Giá thuê ($/15 phút/Replica)
+  server_capacity: 5000000  # Sức chứa mỗi server (5 triệu Request/15 phút)
+  server_cost: 0.05         # Chi phí mỗi server mỗi 15 phút ($)
   
-  # Cấu hình SLA (Chất lượng dịch vụ)
-  sla_penalty: 0.001         # Phạt vi phạm cam kết ($/Request bị rớt)
+  # Cấu hình SLA (Chất lượng dịch vụ)  
+  sla_penalty: 0.0001        # Phạt vi phạm cam kết ($/Request bị rớt)
   
   # Cấu hình Scaling (Giới hạn)
   min_replicas: 1

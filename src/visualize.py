@@ -17,11 +17,7 @@ plt.rcParams['lines.linewidth'] = 1.5
 def plot_forecast_analysis(df, interval, output_dir):
     """
     Vẽ và lưu 2 biểu đồ: Toàn cảnh (Full) và Cận cảnh (Zoom).
-    
-    Args:
-        df (pd.DataFrame): Dữ liệu chứa cột 'ds', 'Actual' và các model.
-        interval (str): Tên khoảng thời gian (15min, 5min...).
-        output_dir (Path): Thư mục lưu ảnh.
+
     """
     output_dir = Path(output_dir)
     
@@ -67,13 +63,13 @@ def plot_forecast_analysis(df, interval, output_dir):
     
     fig_zoom, ax = plt.subplots()
     
-    # Vẽ Actual (Đậm hơn chút ở chế độ zoom)
+    # Vẽ Actual
     ax.plot(df_zoom['ds'], df_zoom['Actual'], label='Thực tế', 
             color=colors['Actual'], alpha=0.5, linewidth=2)
     
     for model in models:
         color = colors.get(model, 'blue')
-        # Vẽ nét đứt hoặc alpha cao để dễ nhìn
+        # Vẽ nét đứt và alpha cao hơn cho Zoom
         ax.plot(df_zoom['ds'], df_zoom[model], label=model, 
                 color=color, alpha=0.9, linewidth=2)
 
