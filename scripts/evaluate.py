@@ -16,11 +16,11 @@ import numpy as np
 from pathlib import Path
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# --- [FIX 1: SETUP ĐƯỜNG DẪN GỐC] ---
+# --- SETUP ĐƯỜNG DẪN GỐC ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT))
 
-# --- [FIX 2: IMPORT TỪ SRC] ---
+# ---  IMPORT TỪ SRC ---
 from src.models import ProphetForecaster, XGBoostForecaster, LSTMForecaster
 
 # Setup Logging
@@ -28,15 +28,14 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger()
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# [Optional] Hack module
+# Đảm bảo import đúng module models
 sys.modules['models'] = sys.modules['src.models']
 
 class Evaluator:
     def __init__(self):
         self.project_root = PROJECT_ROOT
         
-        # Đường dẫn (Lưu ý: Train lưu ở đâu thì Evaluate phải đọc ở đó)
-        # Nếu train lưu ở 'models', hãy sửa dòng dưới thành 'models'
+        # Đường dẫn thư mục
         self.models_dir = self.project_root / "saved_models"
         self.data_dir = self.project_root / "data"
         self.results_dir = self.project_root / "results"
@@ -106,7 +105,7 @@ class Evaluator:
     def run(self):
         leaderboard = []
         print(f"\n{'='*60}")
-        print(f"🚀 BẮT ĐẦU ĐÁNH GIÁ (AUTO FIX FEATURE MISMATCH)")
+        print(f"🚀 BẮT ĐẦU ĐÁNH GIÁ")
         print(f"{'='*60}")
 
         for interval in self.intervals:
@@ -118,7 +117,7 @@ class Evaluator:
                 print(f"   ❌ Không tìm thấy data test tại {self.data_dir}")
                 continue
             
-            # 2. Dynamic Feature Selection (Lấy tất cả feature tiềm năng)
+            # 2. Dynamic Feature Selection 
             exclude_cols = ['ds', 'timestamp', self.target_col, 'y']
             feature_cols = [c for c in df_test.columns if c not in exclude_cols]
             
@@ -140,7 +139,7 @@ class Evaluator:
                     print(f"   ⚠️ Thiếu Prophet: {model_path.name}")
             except Exception as e: print(f"   ❌ Prophet Error: {e}")
 
-            # --- LOAD SCALER & AUTO FIX MISMATCH ---
+            # --- LOAD SCALER  ---
             scaler_X_path = self.models_dir / f"scaler_X_{interval}.pkl"
             scaler_y_path = self.models_dir / f"scaler_y_{interval}.pkl"
             
@@ -152,14 +151,14 @@ class Evaluator:
                 scaler_X = joblib.load(scaler_X_path)
                 scaler_y = joblib.load(scaler_y_path)
                 
-                # [FIX THÔNG MINH] Kiểm tra số lượng feature
+                # Kiểm tra số lượng feature
                 expected_features = scaler_X.n_features_in_
                 current_features = len(feature_cols)
                 
                 if current_features != expected_features:
                     print(f"   ⚠️ Cảnh báo: Scaler cần {expected_features} cột, nhưng tìm thấy {current_features} cột.")
-                    # Nếu thiếu 12 vs 20 -> Có khả năng 12 cột đầu là 12 cột cũ
-                    # Ta sẽ thử cắt lấy đúng số lượng cột đầu tiên
+                    
+                    # Xử lý Feature Mismatch
                     print(f"   🔧 Đang tự động cắt {expected_features} cột đầu tiên để khớp...")
                     X_vals = df_test[feature_cols].values[:, :expected_features]
                 else:
@@ -168,7 +167,7 @@ class Evaluator:
                 X_scaled = scaler_X.transform(X_vals)
                 
             except Exception as e:
-                print(f"   ❌ Lỗi Scaler không thể cứu chữa: {e}")
+                print(f"   ❌ Lỗi Scaler: {e}")
                 print("   👉 Hãy chạy lại 'python -m scripts.train' để đồng bộ model.")
                 continue
 
@@ -208,7 +207,11 @@ class Evaluator:
                         rmse, mse, mae, mape = self.calculate_metrics(y_trim, pred_lstm, interval)
                         
                         leaderboard.append({'Interval': interval, 'Model': 'LSTM', 'RMSE': rmse, 'MSE': mse, 'MAE': mae, 'MAPE (%)': mape})
-                        df_preds['LSTM'] = np.concatenate([[np.nan]*n_lags, pred_lstm])
+                        
+                        # Backfill: Điền n_lags đầu tiên bằng giá trị dự báo đầu tiên
+                        # Tránh để NaN/0 làm sập hệ thống Autoscaling đoạn khởi động
+                        first_val = pred_lstm[0] if len(pred_lstm) > 0 else 0
+                        df_preds['LSTM'] = np.concatenate([np.full(n_lags, first_val), pred_lstm])
                         print(f"   ✅ LSTM: MAPE={mape:.2f}%")
             except Exception as e: print(f"   ❌ LSTM Error: {e}")
 

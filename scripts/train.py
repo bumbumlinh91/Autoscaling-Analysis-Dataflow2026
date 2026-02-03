@@ -6,12 +6,6 @@ Mô tả:
     Tự động quét cấu hình, load dữ liệu đã chuẩn bị,
     huấn luyện song song các mô hình (Prophet, XGBoost, LSTM)
     và xuất báo cáo hiệu năng chi tiết.
-
-Quy trình:
-    1. Setup: Load Config, Logger, Device.
-    2. Data Loading: Đọc file prepared_{mode}_{interval}.csv.
-    3. Feature Selection: Tự động lọc cột feature và target.
-    4. Training Dispatcher: Gọi đúng class model tương ứng.
 """
 import os
 import sys
@@ -58,7 +52,7 @@ class DataflowTrainer:
     def __init__(self):
         self.config = CONFIG
         self.data_dir = PROJECT_ROOT / "data"
-        self.models_dir = PROJECT_ROOT / "saved_models" # Đổi tên folder output
+        self.models_dir = PROJECT_ROOT / "saved_models" 
         self.results_dir = PROJECT_ROOT / "results"
         
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -88,7 +82,7 @@ class DataflowTrainer:
             
             if len(df) < initial_len:
                 logger.warning(f"   🧹 Đã xóa {initial_len - len(df)} dòng trùng lặp timestamp trong {filename}")
-        # -------------------------------
+      
 
         # Đảm bảo không còn NaN
         df = df.dropna()
@@ -105,7 +99,6 @@ class DataflowTrainer:
         if df_train is None or df_test is None:
             return
 
-        # --- [FIX] DYNAMIC FEATURE SELECTION ---
         # Tự động lấy tất cả các cột trừ cột thời gian và target
         exclude_cols = ['ds', 'timestamp', 'y', self.target_col]
         feature_cols = [c for c in df_train.columns if c not in exclude_cols]
@@ -139,7 +132,7 @@ class DataflowTrainer:
             # Tạo bản sao để không ảnh hưởng dữ liệu gốc
             pf_train = df_train.copy()
             
-            # Nếu trong file csv đã có sẵn cột 'y', xóa đi để tránh lỗi
+            # Nếu trong file có cột y (cột target cũ), xóa nó đi
             if 'y' in pf_train.columns:
                 pf_train = pf_train.drop(columns=['y'])
             

@@ -1,3 +1,6 @@
+"""
+SCRIPT: Mở Streamlit Dashboard trong cửa sổ mới.
+"""
 import os
 import sys
 import subprocess

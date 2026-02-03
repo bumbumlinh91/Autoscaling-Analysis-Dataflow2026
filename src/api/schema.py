@@ -1,9 +1,12 @@
+"""
+MODULE: API SCHEMA DEFINITIONS
+"""
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal, Dict, Any
 
 Interval = Literal["1min", "5min", "15min"]
 ModelName = Literal["prophet", "xgboost", "lstm"]
-TargetName = Literal["intensity"]  # bạn đang dùng intensity làm target
+TargetName = Literal["intensity"]  
 
 class ForecastRequest(BaseModel):
     interval: Interval = "15min"
@@ -14,7 +17,7 @@ class ForecastRequest(BaseModel):
 class ForecastPoint(BaseModel):
     ds: str
     yhat: float
-    y: Optional[float] = None  # Thêm giá trị thực tế (Actual) nếu có
+    y: Optional[float] = None  
 
 class ForecastResponse(BaseModel):
     interval: Interval
@@ -40,6 +43,7 @@ class ScalePoint(BaseModel):
     recommended_replicas: int
     action: str
     reason: str
+    y: Optional[float] = None  # Giá trị thực tế nếu có
 
 class RecommendResponse(BaseModel):
     interval: Interval

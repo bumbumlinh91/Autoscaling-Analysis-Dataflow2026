@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Dict, Any, List
 
-# --- SETUP IMPORT TỪ SRC ---
 # Thêm đường dẫn để import được package src
 root_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_dir))
@@ -19,11 +18,11 @@ from src.scaling_policy import AnomalyDetector, ReactiveStrategy, PredictiveStra
 from src.costs import CostModel
 
 
-# --- HELPER ---
+# --- LOAD CONFIG ---
 def load_simulation_config(config_path: str) -> Dict[str, Any]:
     path = Path(config_path)
     if not path.exists():
-        path = root_dir / config_path # Fallback tìm từ root
+        path = root_dir / config_path 
         
     with open(path, "r", encoding="utf-8") as f:
         full_config = yaml.safe_load(f)

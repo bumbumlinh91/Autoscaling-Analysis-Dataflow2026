@@ -7,7 +7,6 @@ import sys
 import pandas as pd
 from pathlib import Path
 
-# --- SETUP IMPORT TỪ SRC ---
 # Thêm thư mục gốc vào sys.path để import được src
 root_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_dir))
@@ -20,7 +19,7 @@ def main():
     charts_dir = results_dir / "charts"
     charts_dir.mkdir(parents=True, exist_ok=True)
     
-    # Lấy danh sách file kết quả (predictions_*.csv)
+    # Lấy danh sách file kết quả 
     files = list(results_dir.glob("predictions_*.csv"))
     
     if not files:
@@ -33,7 +32,7 @@ def main():
     print(f"{'='*60}")
 
     for file_path in files:
-        # Lấy tên interval từ tên file (vd: predictions_15min.csv -> 15min)
+        # Lấy tên interval từ tên file
         interval = file_path.stem.replace("predictions_", "")
         print(f"\n📂 Đang xử lý interval: {interval}...")
         

@@ -6,7 +6,7 @@ Mô tả: Gọi logic từ src/data_preprocessing.py để làm sạch dữ li�
 import sys
 from pathlib import Path
 
-# 1. SETUP ĐƯỜNG DẪN (Để tìm thấy src)
+# 1. SETUP ĐƯỜNG DẪN 
 # Lấy thư mục gốc 
 root_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_dir))

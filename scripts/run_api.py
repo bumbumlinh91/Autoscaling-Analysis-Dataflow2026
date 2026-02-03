@@ -1,14 +1,16 @@
+"""
+SCRIPT: Chạy FastAPI server và mở tài liệu API trong trình duyệt.
+"""
 import os
 import subprocess
 import time
 import webbrowser
 from pathlib import Path
-
 import requests
 
-# ==============================
-# 1) Xác định PROJECT ROOT
-# ==============================
+
+# 1. Xác định PROJECT ROOT
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 os.chdir(PROJECT_ROOT)
 
@@ -21,9 +23,8 @@ print("🚀 Đang khởi động FastAPI server...")
 print(f"📂 Thư mục gốc: {PROJECT_ROOT}")
 print(f"🌐 Tài liệu API: {DOCS_URL}")
 
-# ==============================
-# 2) Khởi động uvicorn (non-blocking)
-# ==============================
+
+# 2. Khởi động uvicorn (non-blocking)
 cmd = [
     "python", "-m", "uvicorn",
     "src.api.app:app",
@@ -34,9 +35,9 @@ cmd = [
 
 proc = subprocess.Popen(cmd)
 
-# ==============================
-# 3) Chờ API sẵn sàng 
-# ==============================
+
+# 3. Chờ API sẵn sàng 
+
 timeout_s = 20
 start = time.time()
 ready = False
@@ -58,9 +59,9 @@ else:
     print("⚠️ API khởi động chậm. Bạn có thể mở thủ công:")
     print(DOCS_URL)
 
-# ==============================
-# 4) Chờ
-# ==============================
+
+# 4. Chờ
+
 try:
     proc.wait()
 except KeyboardInterrupt:

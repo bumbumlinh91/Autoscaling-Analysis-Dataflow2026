@@ -1,3 +1,6 @@
+"""
+MODULE: AUTOSCALING API
+"""
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -31,7 +34,7 @@ def get_config_defaults():
 @app.post("/forecast", response_model=ForecastResponse)
 def api_forecast(req: ForecastRequest):
     try:
-        # [FIX] Map model name to CSV column format (Capitalized)
+        # Mapping tên model
         model_map = {
             "prophet": "Prophet",
             "xgboost": "XGBoost",
@@ -58,7 +61,7 @@ def api_forecast(req: ForecastRequest):
 @app.post("/recommend-scaling", response_model=RecommendResponse)
 def api_recommend(req: RecommendRequest):
     try:
-        # [FIX] Map model name
+        # Mapping tên model
         model_map = {
             "prophet": "Prophet",
             "xgboost": "XGBoost",
@@ -82,6 +85,7 @@ def api_recommend(req: RecommendRequest):
                 "recommended_replicas": int(r["recommended_replicas"]),
                 "action": str(r["action"]),
                 "reason": str(r["reason"]),
+                "y": float(r["y"]) if "y" in r and pd.notnull(r["y"]) else None
             }
             for _, r in df_plan.iterrows()
         ]
