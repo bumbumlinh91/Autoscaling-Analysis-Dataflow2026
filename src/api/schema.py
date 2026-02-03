@@ -14,6 +14,7 @@ class ForecastRequest(BaseModel):
 class ForecastPoint(BaseModel):
     ds: str
     yhat: float
+    y: Optional[float] = None  # Thêm giá trị thực tế (Actual) nếu có
 
 class ForecastResponse(BaseModel):
     interval: Interval

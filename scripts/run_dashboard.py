@@ -15,7 +15,7 @@ cmd = [
     "run", str(dashboard_file),
 ]
 
-print("🚀 Đang mở Streamlit dashboard ")
+print("🚀 Đang mở Streamlit Dashboard...")
 
 subprocess.Popen(
     cmd,

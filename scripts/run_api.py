@@ -17,9 +17,9 @@ PORT = 8000
 DOCS_URL = f"http://{HOST}:{PORT}/docs"
 HEALTH_URL = f"http://{HOST}:{PORT}/health"
 
-print("🚀 Starting FastAPI server...")
-print(f"📂 Project root: {PROJECT_ROOT}")
-print(f"🌐 Target: {DOCS_URL}")
+print("🚀 Đang khởi động FastAPI server...")
+print(f"📂 Thư mục gốc: {PROJECT_ROOT}")
+print(f"🌐 Tài liệu API: {DOCS_URL}")
 
 # ==============================
 # 2) Khởi động uvicorn (non-blocking)
@@ -52,10 +52,10 @@ while time.time() - start < timeout_s:
     time.sleep(0.3)
 
 if ready:
-    print("✅ API is ready! Opening browser...")
+    print("✅ API đã sẵn sàng! Đang mở trình duyệt...")
     webbrowser.open(DOCS_URL)
 else:
-    print("⚠️ API not ready in time. You can open manually:")
+    print("⚠️ API khởi động chậm. Bạn có thể mở thủ công:")
     print(DOCS_URL)
 
 # ==============================
@@ -64,5 +64,5 @@ else:
 try:
     proc.wait()
 except KeyboardInterrupt:
-    print("\n🛑 Stopping server...")
+    print("\n🛑 Đang dừng server...")
     proc.terminate()
