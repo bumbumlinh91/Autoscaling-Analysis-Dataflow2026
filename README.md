@@ -28,7 +28,7 @@ Cách tiếp cận:
 ---
 
 ## 3. Cấu trúc dự án
-
+```text
 ├── config/
 │   └── config.yaml              # File cấu hình trung tâm (Paths, Models, Scaling params)
 ├── dashboard/
@@ -59,7 +59,7 @@ Cách tiếp cận:
 │   ├── scaling_policy.py        # Thuật toán Scaling
 │   └── visualize.py             # Thư viện vẽ đồ thị
 └── requirements.txt             # Danh sách thư viện Python
-
+```
 ---
 
 ## 4. Mô hình & Kiến trúc
