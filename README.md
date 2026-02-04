@@ -83,19 +83,15 @@ Hệ thống **predictive autoscaling** được đánh giá thông qua mô ph�
 
 ### Kết quả chính
 
-- **Khung 15 phút**:  
-  Predictive autoscaling cho hiệu quả cao và ổn định, trong đó **LSTM đạt ROI cao nhất (~90%)**, vượt trội so với các mô hình còn lại.
-
-- **Khung 5 phút**:  
-  Do tải biến động nhanh hơn, hiệu quả chung giảm so với khung dài hơn, tuy nhiên **LSTM vẫn là mô hình tốt nhất**, với ROI khoảng **80%**, cao hơn rõ rệt so với Prophet và XGBoost.
+- **Khung 15 phút**: 
+- Prophet / XGBoost đạt ROI khoảng **67%**, SLA khoảng **99.2%** 
+- LSTM đạt ROI cao ~**90%**, SLA khoảng **99.7%** 
 
 ### Nhận xét
 
 - Predictive autoscaling **luôn giảm chi phí** so với reactive scaling trong tất cả các kịch bản thử nghiệm.  
-- **ROI dao động khoảng 47% – 90%**, phản ánh sự phụ thuộc vào:
-  - Khung thời gian dự báo  
-  - Khả năng nắm bắt biến động tải của mô hình  
 - Các mô hình dự báo chính xác hơn không chỉ tối ưu chi phí hạ tầng mà còn giúp **duy trì SLA ổn định (~99%)** thông qua việc giảm số lượng request bị rớt.
+- Khung dự báo dài hơn kết hợp với mô hình có khả năng học phi tuyến mạnh (như LSTM) cho hiệu quả tổng thể cao hơn, nhờ giảm tần suất scaling không cần thiết và hạn chế vi phạm SLA.
 
 ### Ứng dụng
 
