@@ -236,9 +236,16 @@ with tabs[2]:
         total_reactive = df["total_reactive"].sum()
         savings = total_reactive - total_ai
         roi = (savings / total_reactive * 100) if total_reactive > 0 else 0
-        
+        # --- SLA: % request phục vụ thành công ---
+        total_requests = df["y"].sum()
+
+        sla_ai = 1 - (df["dropped_ai"].sum() / total_requests) if total_requests > 0 else 1
+        sla_reactive = 1 - (df["dropped_reactive"].sum() / total_requests) if total_requests > 0 else 1
+
+        sla_ai_pct = sla_ai * 100
+        sla_reactive_pct = sla_reactive * 100
         # --- HIỂN THỊ METRICS ---
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Tổng chi phí (Reactive)", f"${total_reactive:,.2f}")
         m2.metric("Tổng chi phí (AI Model)", f"${total_ai:,.2f}", delta_color="inverse")
         
@@ -247,7 +254,12 @@ with tabs[2]:
         
         m3.metric("Tiết kiệm (Savings)", f"${savings:,.2f}", delta=delta_val)
         m4.metric("ROI (%)", f"{roi:.2f}%")
-        
+        m5.metric(
+                    "SLA (%)",
+                    f"{sla_ai_pct:.2f}%",
+                    delta=f"{(sla_ai_pct - sla_reactive_pct):+.2f}%"
+                )
+
         # --- BIỂU ĐỒ ---
         st.markdown("#### 📉 So sánh Quy mô Server")
         chart_data = df.melt(id_vars=["ds"], value_vars=["recommended_replicas", "reactive_replicas"], 
@@ -270,10 +282,36 @@ with tabs[2]:
         st.altair_chart(c, use_container_width=True)
 
         # Biểu đồ rớt request để chứng minh tại sao Reactive phạt nặng
-        if df["dropped_reactive"].sum() > 0:
-            st.caption("🔴 Vùng màu đỏ thể hiện lượng request bị rớt do Reactive scaling không kịp:")
-            drop_data = df.melt(id_vars=["ds"], value_vars=["dropped_reactive"], var_name="Type", value_name="Dropped")
-            c_drop = alt.Chart(drop_data).mark_area(color='#FF4B4B', opacity=0.5).encode(
-                x=alt.X('ds:T', title='Thời gian'), y=alt.Y('Dropped:Q', title="Request bị rớt")
-            ).properties(height=200)
+        total_dropped_reactive = df["dropped_reactive"].sum()
+        total_dropped_ai = df["dropped_ai"].sum()
+
+        if total_dropped_reactive > 0 or total_dropped_ai > 0:
+            st.markdown("#### 📉 Phân tích Request bị rớt (Nguyên nhân mất tiền SLA)")
+            st.caption(f"Biểu đồ dưới đây so sánh lượng request bị rớt giữa hai chiến lược. "
+                       f"Reactive thường bị rớt do độ trễ khi scale up, dẫn đến phạt SLA cao. "
+                       f"(Reactive: {int(total_dropped_reactive):,} vs AI: {int(total_dropped_ai):,})")
+            
+            drop_data = df.melt(
+                id_vars=["ds"], 
+                value_vars=["dropped_reactive", "dropped_ai"], 
+                var_name="Strategy", 
+                value_name="Dropped"
+            )
+            
+            drop_data["Strategy"] = drop_data["Strategy"].map({
+                "dropped_reactive": "Reactive (Truyền thống)",
+                "dropped_ai": "AI Model (Predictive)"
+            })
+
+            c_drop = alt.Chart(drop_data).mark_area(opacity=0.6).encode(
+                x=alt.X('ds:T', title='Thời gian', axis=alt.Axis(format='%H:%M')),
+                y=alt.Y('Dropped:Q', title="Số lượng Request bị rớt"),
+                color=alt.Color('Strategy', scale=alt.Scale(domain=['Reactive (Truyền thống)', 'AI Model (Predictive)'], range=['#FF4B4B', '#00CC96'])),
+                tooltip=[
+                    alt.Tooltip('ds:T', format='%H:%M'),
+                    alt.Tooltip('Strategy', title='Chiến lược'),
+                    alt.Tooltip('Dropped:Q', format=',.0f', title='Request rớt')
+                ]
+            ).properties(height=250).interactive()
+            
             st.altair_chart(c_drop, use_container_width=True)
