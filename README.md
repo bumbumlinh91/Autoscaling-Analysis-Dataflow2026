@@ -27,7 +27,42 @@ Cách tiếp cận:
 
 ---
 
-## 3. Mô hình & Kiến trúc
+## 3. Cấu trúc dự án
+
+├── config/
+│   └── config.yaml              # File cấu hình trung tâm (Paths, Models, Scaling params)
+├── dashboard/
+│   └── dashboard.py             # Mã nguồn giao diện Dashboard (Streamlit)
+├── data/                        # Dữ liệu đầu vào và các file trung gian
+├── notebooks/                  
+│   └── EDA.ipynb                # Phân tích khám phá dữ liệu
+├── results/                     # Nơi lưu kết quả dự báo và báo cáo
+├── saved_models/                # Checkpoint của các mô hình đã train
+├── scripts/                     # Các kịch bản thực thi 
+│   ├── evaluate.py              # Đánh giá hiệu năng mô hình
+│   ├── feature_eng.py           # Kỹ thuật đặc trưng
+│   ├── preprocess.py            # Làm sạch và tổng hợp dữ liệu
+│   ├── run_api.py               # Khởi chạy API Backend
+│   ├── run_dashboard.py         # Script khởi động Dashboard
+│   ├── simulate.py              # Chạy mô phỏng Autoscaling & tính ROI
+│   ├── train.py                 # Pipeline huấn luyện mô hình
+│   └── visualize_results.py     # Xuất biểu đồ so sánh kết quả
+├── src/                         # Mã nguồn lõi 
+│   ├── api/                     # API Services & Endpoints
+│       ├── app.py               # FastAPI Application
+│       ├── schema.py            # Pydantic Models
+│       └── services.py          # Business Logic cho API
+│   ├── costs.py                 # Logic tính toán chi phí & SLA
+│   ├── data_preprocessing.py    # Class Parser và Processor dữ liệu
+│   ├── feature_engineering.py   # Logic tạo đặc trưng (Lags, Rolling...)
+│   ├── models.py                # Định nghĩa kiến trúc Prophet, XGBoost, LSTM
+│   ├── scaling_policy.py        # Thuật toán Scaling
+│   └── visualize.py             # Thư viện vẽ đồ thị
+└── requirements.txt             # Danh sách thư viện Python
+
+---
+
+## 4. Mô hình & Kiến trúc
 - **Baseline**: Naive, Seasonal Naive  
 - **Mô hình**: Prophet, XGBoost, LSTM  
 - **Training**:
@@ -37,6 +72,7 @@ Cách tiếp cận:
   - Không shuffle
   - Chỉ dùng dữ liệu quá khứ cho lags/rolling
 
+Pipeline:
 ```mermaid
 graph LR
 A[Raw Logs] --> B(Preprocessing)
@@ -48,7 +84,7 @@ E --> F[Dashboard ROI]
 
 ---
 
-## 4. Đánh giá
+## 5. Đánh giá
 - **Metrics**: RMSE, MAE, MSE, MAPE
 - **Nhận xét chính**:
   - 1m: nhiễu cao, khó bắt spike
@@ -61,7 +97,7 @@ E --> F[Dashboard ROI]
 
 ---
 
-## 5. Triển khai
+## 6. Triển khai
 
 ```bash
 # Tạo môi trường
@@ -86,7 +122,7 @@ python scripts/run_dashboard.py
 
 ---
 
-## 6. Kết quả & Ứng dụng
+## 7. Kết quả & Ứng dụng
 
 Hệ thống **predictive autoscaling** được đánh giá thông qua mô phỏng chi phí, so sánh với **reactive scaling** dưới cùng giả định hạ tầng và SLA.
 
@@ -106,7 +142,7 @@ Hệ thống **predictive autoscaling** được đánh giá thông qua mô ph�
 
 Hệ thống phù hợp cho **web services**, **API gateways** và các nền tảng **cloud autoscaling**, nơi yêu cầu **cân bằng giữa tối ưu chi phí và đảm bảo SLA**, đặc biệt trong môi trường có lưu lượng truy cập biến động theo thời gian.
 
-## 7. Giới hạn & Hướng phát triển
+## 8. Giới hạn & Hướng phát triển
 
 - Spike bất thường chưa được mô hình hóa tường minh
 - Chưa liên kết trực tiếp forecast với latency
@@ -118,7 +154,7 @@ Hệ thống phù hợp cho **web services**, **API gateways** và các nền t�
 
 ---
 
-## 8. Tác giả & License
+## 9. Tác giả & License
 
 - **Tác giả**: *FunnyGuys*
 - **License**: MIT
