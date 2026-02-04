@@ -1,6 +1,10 @@
 # Autoscaling-Analysis-Dataflow2026
 Hệ thống dự báo tải và tự động điều chỉnh máy chủ nhằm tối ưu chi phí vận hành
 ---
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Framework](https://img.shields.io/badge/Framework-Streamlit%20%7C%20FastAPI-red)
+![ML](https://img.shields.io/badge/ML-XGBoost%20%7C%20Prophet%20%7C%20LSTM-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ## 1. Tóm tắt
 Dự án tập trung vào **dự báo lưu lượng web** từ HTTP access logs và sử dụng kết quả dự báo để thiết kế **predictive autoscaling**, nhằm giảm chi phí hạ tầng và hạn chế dropped requests so với reactive autoscaling truyền thống.
@@ -33,8 +37,13 @@ Cách tiếp cận:
   - Không shuffle
   - Chỉ dùng dữ liệu quá khứ cho lags/rolling
 
-Pipeline:
-Logs → Preprocess → Aggregate → Forecast → Autoscaling → Cost & SLA Eval
+```mermaid
+graph LR
+A[Raw Logs] --> B(Preprocessing)
+B --> C{Model Training}
+C --> D[Forecast API]
+D --> E(Simulation Engine)
+E --> F[Dashboard ROI]
 
 
 ---
