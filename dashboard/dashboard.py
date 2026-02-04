@@ -282,10 +282,36 @@ with tabs[2]:
         st.altair_chart(c, use_container_width=True)
 
         # Biểu đồ rớt request để chứng minh tại sao Reactive phạt nặng
-        if df["dropped_reactive"].sum() > 0:
-            st.caption("🔴 Vùng màu đỏ thể hiện lượng request bị rớt do Reactive scaling không kịp:")
-            drop_data = df.melt(id_vars=["ds"], value_vars=["dropped_reactive"], var_name="Type", value_name="Dropped")
-            c_drop = alt.Chart(drop_data).mark_area(color='#FF4B4B', opacity=0.5).encode(
-                x=alt.X('ds:T', title='Thời gian'), y=alt.Y('Dropped:Q', title="Request bị rớt")
-            ).properties(height=200)
+        total_dropped_reactive = df["dropped_reactive"].sum()
+        total_dropped_ai = df["dropped_ai"].sum()
+
+        if total_dropped_reactive > 0 or total_dropped_ai > 0:
+            st.markdown("#### 📉 Phân tích Request bị rớt (Nguyên nhân mất tiền SLA)")
+            st.caption(f"Biểu đồ dưới đây so sánh lượng request bị rớt giữa hai chiến lược. "
+                       f"Reactive thường bị rớt do độ trễ khi scale up, dẫn đến phạt SLA cao. "
+                       f"(Reactive: {int(total_dropped_reactive):,} vs AI: {int(total_dropped_ai):,})")
+            
+            drop_data = df.melt(
+                id_vars=["ds"], 
+                value_vars=["dropped_reactive", "dropped_ai"], 
+                var_name="Strategy", 
+                value_name="Dropped"
+            )
+            
+            drop_data["Strategy"] = drop_data["Strategy"].map({
+                "dropped_reactive": "Reactive (Truyền thống)",
+                "dropped_ai": "AI Model (Predictive)"
+            })
+
+            c_drop = alt.Chart(drop_data).mark_area(opacity=0.6).encode(
+                x=alt.X('ds:T', title='Thời gian', axis=alt.Axis(format='%H:%M')),
+                y=alt.Y('Dropped:Q', title="Số lượng Request bị rớt"),
+                color=alt.Color('Strategy', scale=alt.Scale(domain=['Reactive (Truyền thống)', 'AI Model (Predictive)'], range=['#FF4B4B', '#00CC96'])),
+                tooltip=[
+                    alt.Tooltip('ds:T', format='%H:%M'),
+                    alt.Tooltip('Strategy', title='Chiến lược'),
+                    alt.Tooltip('Dropped:Q', format=',.0f', title='Request rớt')
+                ]
+            ).properties(height=250).interactive()
+            
             st.altair_chart(c_drop, use_container_width=True)
