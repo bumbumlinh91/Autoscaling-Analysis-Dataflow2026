@@ -17,7 +17,7 @@ Cách tiếp cận:
 - **Trường chính**: timestamp, request, status_code, bytes
 - **Tiền xử lý**:
   - Parse & chuẩn hóa thời gian
-  - Loại bỏ server outage (01/08 → 03/08/1995)
+  - Loại bỏ server outage ("1995-07-28 13:25:00" - "1995-08-03 05:25:00")
   - Tổng hợp theo 1m / 5m / 15m
   - Feature engineering: lags (24h, 7d), rolling stats, calendar features
 
@@ -48,7 +48,7 @@ Logs → Preprocess → Aggregate → Forecast → Autoscaling → Cost & SLA Ev
 - **So sánh mô hình**:
   - Prophet: mượt, bỏ lỡ spike
   - XGBoost: bám tốt biến động ngắn hạn
-  - LSTM: ổn định nhất ở 15m nhưng chi phí cao
+  - LSTM: ổn định nhất ở 15m 
 
 ---
 
@@ -73,19 +73,33 @@ python scripts/run_dashboard.py
 - API endpoints:
   - `POST /forecast`
   - `POST /recommend-scaling`
-- Demo UI: Streamlit dashboard hiển thị kết quả dự báo và quyết định autoscaling
+- Demo UI: 
 
 ---
 
 ## 6. Kết quả & Ứng dụng
 
-- **Giảm 34.14% chi phí vận hành**
-- **Giảm ~110 triệu dropped requests**
-- SLA error rate giảm từ **3.10% → 2.00%**
+Hệ thống **predictive autoscaling** được đánh giá thông qua mô phỏng chi phí, so sánh với **reactive scaling** dưới cùng giả định hạ tầng và SLA.
 
-Ứng dụng cho web services, API gateways và các hệ thống autoscaling trên nền tảng cloud.
+### Kết quả chính
 
----
+- **Khung 15 phút**:  
+  Predictive autoscaling cho hiệu quả cao và ổn định, trong đó **LSTM đạt ROI cao nhất (~90%)**, vượt trội so với các mô hình còn lại.
+
+- **Khung 5 phút**:  
+  Do tải biến động nhanh hơn, hiệu quả chung giảm so với khung dài hơn, tuy nhiên **LSTM vẫn là mô hình tốt nhất**, với ROI khoảng **80%**, cao hơn rõ rệt so với Prophet và XGBoost.
+
+### Nhận xét
+
+- Predictive autoscaling **luôn giảm chi phí** so với reactive scaling trong tất cả các kịch bản thử nghiệm.  
+- **ROI dao động khoảng 47% – 90%**, phản ánh sự phụ thuộc vào:
+  - Khung thời gian dự báo  
+  - Khả năng nắm bắt biến động tải của mô hình  
+- Các mô hình dự báo chính xác hơn không chỉ tối ưu chi phí hạ tầng mà còn giúp **duy trì SLA ổn định (~99%)** thông qua việc giảm số lượng request bị rớt.
+
+### Ứng dụng
+
+Hệ thống phù hợp cho **web services**, **API gateways** và các nền tảng **cloud autoscaling**, nơi yêu cầu **cân bằng giữa tối ưu chi phí và đảm bảo SLA**, đặc biệt trong môi trường có lưu lượng truy cập biến động theo thời gian.
 
 ## 7. Giới hạn & Hướng phát triển
 

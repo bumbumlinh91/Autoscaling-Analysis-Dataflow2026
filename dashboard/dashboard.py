@@ -236,9 +236,16 @@ with tabs[2]:
         total_reactive = df["total_reactive"].sum()
         savings = total_reactive - total_ai
         roi = (savings / total_reactive * 100) if total_reactive > 0 else 0
-        
+        # --- SLA: % request phục vụ thành công ---
+        total_requests = df["y"].sum()
+
+        sla_ai = 1 - (df["dropped_ai"].sum() / total_requests) if total_requests > 0 else 1
+        sla_reactive = 1 - (df["dropped_reactive"].sum() / total_requests) if total_requests > 0 else 1
+
+        sla_ai_pct = sla_ai * 100
+        sla_reactive_pct = sla_reactive * 100
         # --- HIỂN THỊ METRICS ---
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Tổng chi phí (Reactive)", f"${total_reactive:,.2f}")
         m2.metric("Tổng chi phí (AI Model)", f"${total_ai:,.2f}", delta_color="inverse")
         
@@ -247,7 +254,12 @@ with tabs[2]:
         
         m3.metric("Tiết kiệm (Savings)", f"${savings:,.2f}", delta=delta_val)
         m4.metric("ROI (%)", f"{roi:.2f}%")
-        
+        m5.metric(
+                    "SLA (%)",
+                    f"{sla_ai_pct:.2f}%",
+                    delta=f"{(sla_ai_pct - sla_reactive_pct):+.2f}%"
+                )
+
         # --- BIỂU ĐỒ ---
         st.markdown("#### 📉 So sánh Quy mô Server")
         chart_data = df.melt(id_vars=["ds"], value_vars=["recommended_replicas", "reactive_replicas"], 
