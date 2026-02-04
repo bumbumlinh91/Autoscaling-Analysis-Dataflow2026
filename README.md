@@ -100,6 +100,7 @@ E --> F[Dashboard ROI]
 ## 6. Triển khai
 
 ```bash
+# Tải về 2 file data train và test, để trong folder "data"
 # Tạo môi trường
 python -m venv .venv
 source .venv/bin/activate        
